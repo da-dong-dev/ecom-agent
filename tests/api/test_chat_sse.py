@@ -13,12 +13,18 @@ from functools import partial
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.api import chat as chat_module
 from app.api.chat import ChatError, run_turn
 from app.core.history import load_messages
 from app.core.lock import conversation_lock as real_lock
+from app.db.models import Ticket
 from app.db.repo_conversation import create_conversation, get_conversation, set_flow
+from app.db.repo_message import (
+    append_message,
+    get_reply_by_client_message_id,
+)
 
 # ── 假图 ────────────────────────────────────────────────────
 
@@ -26,20 +32,29 @@ from app.db.repo_conversation import create_conversation, get_conversation, set_
 class FakeGraph:
     """只做一件事：按给定顺序吐出 update chunk，模拟 LangGraph 的 astream。"""
 
-    def __init__(self, chunks: list[dict]) -> None:
+    def __init__(self, chunks: list) -> None:
         self.chunks = chunks
+        self.calls = 0
         self.seen_state: dict | None = None
         self.seen_mode: str | None = None
+        self.seen_subgraphs: bool | None = None
 
-    async def astream(self, state, stream_mode="updates"):
+    async def astream(self, state, stream_mode="updates", subgraphs=False):
+        self.calls += 1
         self.seen_state = state
         self.seen_mode = stream_mode
+        self.seen_subgraphs = subgraphs
         for chunk in self.chunks:
-            yield chunk
+            if isinstance(chunk, tuple):
+                yield chunk
+            elif subgraphs:
+                yield ((), chunk)
+            else:
+                yield chunk
 
 
 class BoomGraph:
-    async def astream(self, state, stream_mode="updates"):
+    async def astream(self, state, stream_mode="updates", subgraphs=False):
         raise RuntimeError("boom")
         yield  # pragma: no cover
 
@@ -96,6 +111,21 @@ STRONG_CHUNKS = [
     },
 ]
 
+REFUND_CHUNKS = [
+    {"resolve_reference": {"resolved_query": "订单1001 尺寸不合适"}},
+    {"classify_intent": {"intent": "退款申请", "route": "rules"}},
+    {"validate": {"order_snapshot": {"order_id": "1001", "amount": 124900}}},
+    {"judge": {"refund_judgement": {"eligible": True, "reason_code": "size"}}},
+    {"compute": {"refund_amount": 124900}},
+    {"compliance": {"compliance_violation": None}},
+    {
+        "respond": {
+            "answer": "本次应退金额：1249.00 元。",
+            "is_placeholder": False,
+        }
+    },
+]
+
 
 # ── 帧顺序 ──────────────────────────────────────────────────
 
@@ -103,7 +133,14 @@ STRONG_CHUNKS = [
 async def test_frame_order(frames):
     out = await frames(STRONG_CHUNKS)
     events = [f.get("event") or "delta" for f in out]
-    assert events == ["ack", "route", "delta", "citations", "done"]
+    assert events == [
+        "ack",
+        "route",
+        "progress",
+        "delta",
+        "citations",
+        "done",
+    ]
 
 
 async def test_route_frame_carries_intent_and_route(frames):
@@ -183,6 +220,336 @@ async def test_messages_are_persisted(session, spans):
     assert rows[1]["meta"]["citation_ids"] == ["returns#退货运费由谁承担"]
 
 
+async def test_retry_replays_without_running_graph(session, spans):
+    """Ch08：同一 client_message_id 重试直接回放，不再跑图、不再写第二条回答。"""
+    cid = await create_conversation("u1", session=session)
+    first_graph = FakeGraph(REFUND_CHUNKS)
+    first = [
+        f
+        async for f in run_turn(
+            "订单1001 尺寸不合适",
+            cid,
+            "t-1",
+            client_message_id="cm-replay-1",
+            graph=first_graph,
+            session=session,
+        )
+    ]
+    assert first_graph.calls == 1
+
+    retry_graph = FakeGraph(REFUND_CHUNKS)
+    retry = [
+        f
+        async for f in run_turn(
+            "订单1001 尺寸不合适",
+            cid,
+            "t-2",
+            client_message_id="cm-replay-1",
+            graph=retry_graph,
+            session=session,
+        )
+    ]
+
+    assert retry_graph.calls == 0
+    assert [f.get("event") or "delta" for f in retry] == [
+        "ack",
+        "route",
+        "progress",
+        "delta",
+        "done",
+    ]
+    assert retry[0]["user_message_id"] == first[0]["user_message_id"]
+    route = next(f for f in retry if f.get("event") == "route")
+    assert route["route"] == "rules"
+    assert route["intent"] == "退款申请"
+    assert route["resumed"] is False
+    replay_progress = next(
+        f for f in retry if f.get("event") == "progress"
+    )
+    assert replay_progress["stage"] == "waiting_confirm"
+    assert replay_progress["amount"] == 124900
+    assert next(f["delta"] for f in retry if "delta" in f) == next(
+        f["delta"] for f in first if "delta" in f
+    )
+    assert retry[-1]["message_id"] == first[-1]["message_id"]
+
+    replay_span = next(s for s in spans if s["name"] == "turn:replay")
+    assert replay_span["attrs"]["assistant_message_id"] == retry[-1]["message_id"]
+
+    rows = await load_messages(cid, session=session)
+    assert [row["role"] for row in rows] == ["user", "assistant"]
+
+
+async def test_retry_without_reply_reruns_graph(session, spans):
+    """用户消息存在、但还没有助手回复：应该重跑，而不是误判成已完成。"""
+    cid = await create_conversation("u1", session=session)
+    await append_message(
+        cid,
+        "user",
+        "退货运费谁出",
+        client_message_id="cm-no-reply",
+        session=session,
+    )
+
+    graph = FakeGraph(STRONG_CHUNKS)
+    out = [
+        f
+        async for f in run_turn(
+            "退货运费谁出",
+            cid,
+            "t-1",
+            client_message_id="cm-no-reply",
+            graph=graph,
+            session=session,
+        )
+    ]
+
+    assert graph.calls == 1
+    assert out[-1]["event"] == "done"
+    rows = await load_messages(cid, session=session)
+    assert [row["role"] for row in rows] == ["user", "assistant"]
+
+
+async def test_error_assistant_does_not_block_retry(session, spans):
+    """错误消息没有 reply_to，不能被当成“已完成”回放。"""
+    cid = await create_conversation("u1", session=session)
+    await append_message(
+        cid,
+        "user",
+        "退货运费谁出",
+        client_message_id="cm-error-replay",
+        session=session,
+    )
+    await append_message(
+        cid,
+        "assistant",
+        "服务暂时不可用",
+        status="error",
+        session=session,
+    )
+
+    graph = FakeGraph(STRONG_CHUNKS)
+    _ = [
+        f
+        async for f in run_turn(
+            "退货运费谁出",
+            cid,
+            "t-1",
+            client_message_id="cm-error-replay",
+            graph=graph,
+            session=session,
+        )
+    ]
+
+    assert graph.calls == 1
+
+
+async def test_progress_frames_for_refund(session, spans):
+    """退款：核对订单 → 算出金额 → 等待确认；最终进度在 delta 之前。"""
+    cid = await create_conversation("u1", session=session)
+    chunks = [
+        {"classify_intent": {"intent": "退款申请", "route": "rules"}},
+        (
+            ("rules:1",),
+            {"query_data": {"order_snapshot": {"order_id": "1001", "amount": 124900}}},
+        ),
+        (
+            ("rules:1",),
+            {"judge": {"refund_judgement": {"eligible": True, "reason_code": "size"}}},
+        ),
+        (("rules:1",), {"compute": {"refund_amount": 124900}}),
+        (("rules:1",), {"compliance": {"compliance_violation": None}}),
+        {
+            "rules": {
+                "answer": "本次应退金额：1249.00 元。",
+                "refund_amount": 124900,
+                "refund_judgement": {"eligible": True, "reason_code": "size"},
+                "compliance_violation": None,
+                "order_snapshot": {"order_id": "1001", "amount": 124900},
+                "route": "rules",
+                "intent": "退款申请",
+            }
+        },
+    ]
+
+    out = [
+        f
+        async for f in run_turn(
+            "订单1001 尺寸不合适",
+            cid,
+            "t-1",
+            graph=FakeGraph(chunks),
+            session=session,
+        )
+    ]
+
+    progress = [f for f in out if f.get("event") == "progress"]
+    assert [f["stage"] for f in progress] == [
+        "checking_order",
+        "amount_ready",
+        "waiting_confirm",
+    ]
+    assert progress[0]["status"] == "done"
+    assert progress[1]["amount"] == 124900
+    assert progress[2]["status"] == "waiting"
+    assert progress[2]["amount"] == 124900
+
+    kinds = [f.get("event") or "delta" for f in out]
+    last_progress = max(
+        index for index, f in enumerate(out) if f.get("event") == "progress"
+    )
+    assert last_progress < kinds.index("delta")
+
+
+async def test_progress_waiting_info_is_not_duplicated(session, spans):
+    """need_info 已经发过 waiting_info；最终状态相同就不重复发。"""
+    cid = await create_conversation("u1", session=session)
+    chunks = [
+        {"classify_intent": {"intent": "退款申请", "route": "rules"}},
+        (
+            ("rules:1",),
+            {
+                "need_info": {
+                    "pending_question": "order_id",
+                    "answer": "请提供订单号。",
+                    "is_placeholder": False,
+                }
+            },
+        ),
+        {
+            "rules": {
+                "answer": "请提供订单号。",
+                "pending_question": "order_id",
+                "route": "rules",
+                "intent": "退款申请",
+                "is_placeholder": False,
+            }
+        },
+    ]
+
+    out = [
+        f
+        async for f in run_turn(
+            "我想退款",
+            cid,
+            "t-1",
+            graph=FakeGraph(chunks),
+            session=session,
+        )
+    ]
+
+    progress = [f for f in out if f.get("event") == "progress"]
+    assert progress == [
+        {
+            "event": "progress",
+            "stage": "waiting_info",
+            "status": "waiting",
+            "pending_question": "order_id",
+        }
+    ]
+
+
+async def test_assistant_meta_persists_actions_and_signals(session, spans):
+    """Ch08：刷新后要能恢复金额/追问/动作，所以这些要落进 assistant meta。"""
+    cid = await create_conversation("u1", session=session)
+    _ = [
+        f
+        async for f in run_turn(
+            "订单1001 尺寸不合适",
+            cid,
+            "t-1",
+            client_message_id="cm-refund-1",
+            graph=FakeGraph(REFUND_CHUNKS),
+            session=session,
+        )
+    ]
+
+    rows = await load_messages(cid, session=session)
+    meta = rows[1]["meta"]
+    assert meta["route"] == "rules"
+    assert meta["actions"] == []
+    assert meta["signals"] == {
+        "amount": 124900,
+        "pending_question": None,
+        "refund_eligible": True,
+    }
+
+    # 助手回复要能按 client_message_id 精确找回
+    reply = await get_reply_by_client_message_id(
+        cid, "cm-refund-1", session=session
+    )
+    assert reply is not None
+    assert reply.content == rows[1]["content"]
+
+
+async def test_meta_amount_is_none_when_compliance_fails(session, spans):
+    """不可展示的金额不能进 meta；否则刷新后前端会显示一个不该出现的数字。"""
+    cid = await create_conversation("u1", session=session)
+    chunks = [
+        {"classify_intent": {"intent": "退款申请", "route": "rules"}},
+        {"validate": {"order_snapshot": {"order_id": "1001", "amount": 124900}}},
+        {"judge": {"refund_judgement": {"eligible": True, "reason_code": "size"}}},
+        {"compute": {"refund_amount": 124900}},
+        {
+            "compliance": {
+                "compliance_violation": "amount_exceeds_paid",
+                "answer": "这个问题我这边处理不了，已经为您转接人工客服。",
+                "actions": [{"type": "transfer_human"}],
+            }
+        },
+    ]
+
+    _ = [
+        f
+        async for f in run_turn(
+            "订单1001 尺寸不合适",
+            cid,
+            "t-1",
+            graph=FakeGraph(chunks),
+            session=session,
+        )
+    ]
+
+    rows = await load_messages(cid, session=session)
+    meta = rows[1]["meta"]
+    assert meta["signals"]["amount"] is None
+    assert meta["actions"] == [{"type": "transfer_human"}]
+
+
+async def test_persist_failure_fails_closed(session, spans, monkeypatch):
+    """保存失败不能先展示回答；否则刷新后回答消失，重试还会换措辞。"""
+    cid = await create_conversation("u1", session=session)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(chat_module, "save_assistant_message", boom)
+
+    frames = []
+    with pytest.raises(ChatError) as exc:
+        async for frame in run_turn(
+            "退货运费谁出",
+            cid,
+            "t-1",
+            graph=FakeGraph(STRONG_CHUNKS),
+            session=session,
+        ):
+            frames.append(frame)
+
+    assert exc.value.code == "internal_error"
+    assert [f.get("event") or "delta" for f in frames] == ["ack", "route"]
+
+    rows = await load_messages(cid, session=session)
+    assert [row["role"] for row in rows] == ["user"]
+
+    persist = next(s for s in spans if s["name"] == "turn:persist")
+    assert persist["attrs"]["persisted"] is False
+    assert persist["attrs"]["error"] == "RuntimeError"
+
+    total = next(s for s in spans if s["name"] == "turn:total")
+    assert total["attrs"]["persisted"] is False
+
+
 async def test_selected_action_allows_empty_message(session, spans):
     cid = await create_conversation("u1", session=session)
     _ = [
@@ -200,6 +567,112 @@ async def test_selected_action_allows_empty_message(session, spans):
     rows = await load_messages(cid, session=session)
     assert rows[0]["content"] == ""
     assert rows[0]["meta"]["selected_action"]["order_id"] == "1001"
+
+
+async def test_transfer_action_shortcuts_graph(session, spans):
+    """转人工 = 结构化动作：不跑图、不建工单、清空当前流程。"""
+    cid = await create_conversation("u1", session=session)
+    await set_flow(
+        cid,
+        active_flow="refund",
+        pending_question="order_id",
+        draft={"intent": "退款申请"},
+        session=session,
+    )
+    graph = FakeGraph(STRONG_CHUNKS)
+    out = [
+        f
+        async for f in run_turn(
+            "",
+            cid,
+            "t-1",
+            client_message_id="cm-transfer-1",
+            selected_action={"type": "transfer_human"},
+            graph=graph,
+            session=session,
+        )
+    ]
+
+    assert graph.calls == 0
+    assert [f.get("event") or "delta" for f in out] == [
+        "ack",
+        "route",
+        "progress",
+        "delta",
+        "actions",
+        "done",
+    ]
+    route = next(f for f in out if f.get("event") == "route")
+    assert route == {
+        "event": "route",
+        "route": "human",
+        "intent": "其他",
+        "resumed": False,
+    }
+    progress = next(f for f in out if f.get("event") == "progress")
+    assert progress == {
+        "event": "progress",
+        "stage": "handoff",
+        "status": "waiting",
+    }
+    delta = next(f["delta"] for f in out if "delta" in f)
+    assert delta == "已为您转接人工客服，请稍候。人工客服会尽快与您联系。"
+    actions = next(f for f in out if f.get("event") == "actions")
+    assert actions["items"] == [{"type": "transfer_human"}]
+
+    rows = await load_messages(cid, session=session)
+    assert [row["role"] for row in rows] == ["user", "assistant"]
+    assert rows[0]["meta"]["selected_action"] == {"type": "transfer_human"}
+    assert rows[1]["meta"]["actions"] == [{"type": "transfer_human"}]
+
+    conv = await get_conversation(cid, user_id="u1", session=session)
+    assert conv.active_flow is None
+    assert conv.pending_question is None
+    assert (await session.execute(select(Ticket))).scalars().all() == []
+
+
+async def test_transfer_action_retry_replays(session, spans):
+    """转人工也能走同一 client_message_id 回放，不重复写。"""
+    cid = await create_conversation("u1", session=session)
+    first = [
+        f
+        async for f in run_turn(
+            "",
+            cid,
+            "t-1",
+            client_message_id="cm-transfer-2",
+            selected_action={"type": "transfer_human"},
+            graph=FakeGraph(STRONG_CHUNKS),
+            session=session,
+        )
+    ]
+
+    retry_graph = FakeGraph(STRONG_CHUNKS)
+    retry = [
+        f
+        async for f in run_turn(
+            "",
+            cid,
+            "t-2",
+            client_message_id="cm-transfer-2",
+            selected_action={"type": "transfer_human"},
+            graph=retry_graph,
+            session=session,
+        )
+    ]
+
+    assert retry_graph.calls == 0
+    assert [f.get("event") or "delta" for f in retry] == [
+        "ack",
+        "route",
+        "progress",
+        "delta",
+        "actions",
+        "done",
+    ]
+    assert retry[-1]["message_id"] == first[-1]["message_id"]
+    rows = await load_messages(cid, session=session)
+    assert [row["role"] for row in rows] == ["user", "assistant"]
 
 
 async def test_unknown_conversation_is_not_found(session, spans):
@@ -576,6 +1049,7 @@ async def test_one_span_per_node_plus_total(spans, frames):
         "node:resolve_reference",
         "node:classify_intent",
         "node:knowledge",
+        "turn:persist",
         "turn:total",
     ]
 
@@ -633,6 +1107,7 @@ async def test_state_passed_to_graph(session, spans):
         "resumed": False,
     }
     assert fake.seen_mode == "updates"
+    assert fake.seen_subgraphs is True
 
 
 # ── HTTP 层 ────────────────────────────────────────────────

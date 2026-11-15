@@ -24,6 +24,7 @@ HTTP 这一层还需要一个兜底码：
 
 `forbidden` 留给 Ch06 的真实鉴权；现在归属不符统一走 `not_found`。
 """
+import json
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -37,7 +38,9 @@ from app.core import slot_fill
 from app.core.history import load_window, save_assistant_message, save_user_message
 from app.core.lock import BusyError, conversation_lock
 from app.core.output_guard import guard_answer, output_context
+from app.core.progress import final_frame, node_frame
 from app.core.session_state import (
+    FlowDecision,
     apply_flow_decision,
     clear_flow,
     decide_flow,
@@ -45,10 +48,15 @@ from app.core.session_state import (
 )
 from app.core.tracer import record_span
 from app.db.errors import NotFound
-from app.db.models import utcnow
+from app.db.models import Message, utcnow
 from app.db.repo_conversation import create_conversation, get_conversation
+from app.db.repo_message import (
+    get_reply_by_client_message_id,
+    get_user_message_by_client_id,
+)
 from app.db.session import session_scope
 from app.graph.build import build_graph
+from app.graph.nodes import human_exit
 from app.graph.routing import INTENT_TO_ROUTE
 from app.graph.rules_exit import extract_draft
 
@@ -154,6 +162,261 @@ async def _save_error_message(cid: int, session: AsyncSession | None) -> None:
         logger.exception("错误消息落库失败 conv=%s", cid)
 
 
+def _parse_assistant_meta(raw: str | None) -> dict[str, Any]:
+    """解析助手消息 `meta`；坏 JSON 只影响回放展示，不影响回答本身。"""
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("助手消息 meta 不是合法 JSON，回放时忽略")
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+async def _replay_frames(
+    *,
+    cid: int,
+    reply: Message,
+    user_message_id: int,
+    trace_id: str,
+) -> AsyncIterator[dict]:
+    """把已存的助手回复按 SSE 帧回放；不跑图、不改 flow、不再落库。"""
+    meta = _parse_assistant_meta(reply.meta)
+    yield {
+        "event": "ack",
+        "conversation_id": cid,
+        "user_message_id": user_message_id,
+    }
+
+    route = meta.get("route")
+    if route is not None:
+        yield {
+            "event": "route",
+            "route": route,
+            "intent": meta.get("intent"),
+            "resumed": bool(meta.get("resumed")),
+        }
+
+    raw_actions = meta.get("actions")
+    actions = raw_actions if isinstance(raw_actions, list) else []
+    raw_signals = meta.get("signals")
+    signals = raw_signals if isinstance(raw_signals, dict) else {}
+    replay_progress = final_frame(
+        route=route,
+        actions=actions,
+        signals=signals,
+    )
+    if replay_progress is not None:
+        yield replay_progress
+
+    if reply.content:
+        yield {"delta": reply.content}
+
+    citations = meta.get("citation_ids") or []
+    if citations:
+        yield {"event": "citations", "items": citations}
+
+    if actions:
+        yield {"event": "actions", "items": actions}
+
+    now = utcnow()
+    await record_span(
+        trace_id=trace_id,
+        name="turn:replay",
+        start_at=now,
+        end_at=now,
+        attrs={
+            "client_message_id": reply.reply_to_client_message_id,
+            "assistant_message_id": reply.id,
+        },
+    )
+    yield {"event": "done", "message_id": reply.id}
+
+
+async def _finalize_answer(
+    *,
+    cid: int,
+    trace_id: str,
+    final: dict[str, Any],
+    decision: FlowDecision,
+    client_message_id: str | None,
+    capture: dict | None,
+    session: AsyncSession | None,
+    turn_start: datetime,
+    wall_start: float,
+    last_progress: dict | None,
+) -> AsyncIterator[dict]:
+    """输出守卫 → 落库 → 发进度/回答/引用/动作/done。
+
+    正常图和转人工短路共用这一段，避免两套保存/失败/span 逻辑漂移。
+    """
+    answer = final.get("answer") or ""
+    actions = list(final.get("actions") or [])
+
+    # 输出兜底：金额只能来自 compute / 工具结果，承诺和系统提示泄露一律整段替换。
+    # 必须在 delta 之前、落库之前——用户看到和回放的都得是 guard 之后的回答。
+    guarded = guard_answer(answer, output_context(final))
+    answer = guarded.answer
+    # actions 里可能有 `transfer_human`，也可能是 `resume_flow` / `park_flow` / `transfer_human` 的组合。
+    if guarded.action and guarded.action not in actions:
+        # 兜底动作：如果输出被替换成兜底回答，必须加一个转人工动作，避免用户看了回答却没出口。
+        actions.append(guarded.action)
+
+    # 本轮没接回、旧流程还在、又答完了新话题 → park：保留旧流程并提示
+    if decision.parked_flow:
+        answer = _with_park_notice(answer, decision.parked_flow)
+        actions.append({"type": "resume_flow", "flow": decision.parked_flow})
+    if decision.replaced_flow:
+        logger.info(
+            "流程被替换 conv=%s old=%s new=%s",
+            cid,
+            decision.replaced_flow,
+            decision.active_flow,
+        )
+
+    if capture is not None:
+        capture["final"] = final
+        capture["answer"] = answer
+        capture["actions"] = list(actions)
+        capture["violations"] = list(guarded.violations)
+
+    citations = final.get("citation_ids") or []
+    route = final.get("route")
+    judgement = final.get("refund_judgement") or {}
+    refund_amount = final.get("refund_amount")
+    # 金额只在“退款可退 + 合规通过”时对外展示；转人工/不可退不展示金额。
+    amount_ok = (
+        route == "rules"
+        and bool(judgement.get("eligible"))
+        and isinstance(refund_amount, int)
+        and not isinstance(refund_amount, bool)
+        and refund_amount > 0
+        and final.get("compliance_violation") is None
+    )
+    assistant_meta = {
+        "intent": final.get("intent"),
+        "route": route,
+        "citation_ids": citations,
+        "resumed": bool(final.get("resumed")),
+        "actions": actions,
+        "signals": {
+            "amount": refund_amount if amount_ok else None,
+            "pending_question": final.get("pending_question"),
+            "refund_eligible": (
+                bool(judgement.get("eligible")) if route == "rules" else None
+            ),
+        },
+    }
+
+    # 先落库再展示：C2-lite 的不变式是“用户看到的回答一定已落库”。
+    # 保存失败时不回 delta，只回 error 帧；用户消息已经写过，重试可重跑。
+    persist_start = utcnow()
+    persist_wall = time.perf_counter()
+    try:
+        async with session_scope(session) as s:
+            assistant_message_id = await save_assistant_message(
+                cid,
+                answer,
+                meta=assistant_meta,
+                reply_to_client_message_id=client_message_id,
+                session=s,
+            )
+            # 与助手消息同事务：不能出现「消息写了、流程没写」的半截状态
+            await apply_flow_decision(cid, decision, session=s)
+    except Exception as exc:
+        persist_end = utcnow()
+        persist_wall_ms = int((time.perf_counter() - persist_wall) * 1000)
+        logger.exception("助手消息/流程落库失败 conv=%s", cid)
+        await record_span(
+            trace_id=trace_id,
+            name="turn:persist",
+            start_at=persist_start,
+            end_at=persist_end,
+            attrs={
+                "duration_ms": _elapsed_ms(persist_start, persist_end),
+                "wall_ms": persist_wall_ms,
+                "persisted": False,
+                "flow_action": decision.action,
+                "error": type(exc).__name__,
+            },
+        )
+        await record_span(
+            trace_id=trace_id,
+            name="turn:total",
+            start_at=turn_start,
+            end_at=persist_end,
+            attrs={
+                "wall_ms": int((time.perf_counter() - wall_start) * 1000),
+                "route": route,
+                "has_answer": bool(answer),
+                "citations": len(citations),
+                "parked": decision.parked_flow is not None,
+                "flow_replaced": decision.replaced_flow is not None,
+                "output_violations": list(guarded.violations),
+                "persisted": False,
+            },
+        )
+        raise ChatError(
+            "internal_error", "服务暂时不可用，请稍后重试。"
+        ) from exc
+
+    persist_end = utcnow()
+    persist_wall_ms = int((time.perf_counter() - persist_wall) * 1000)
+    persist_ms = _elapsed_ms(persist_start, persist_end)
+
+    final_progress = final_frame(
+        route=route,
+        actions=actions,
+        signals=assistant_meta["signals"],
+    )
+    if final_progress is not None and final_progress != last_progress:
+        yield final_progress
+
+    if answer:
+        yield {"delta": answer}
+
+    if citations:
+        yield {"event": "citations", "items": citations}
+
+    if actions:
+        yield {"event": "actions", "items": actions}
+
+    await record_span(
+        trace_id=trace_id,
+        name="turn:persist",
+        start_at=persist_start,
+        end_at=persist_end,
+        attrs={
+            "duration_ms": persist_ms,
+            "wall_ms": persist_wall_ms,
+            "persisted": True,
+            "assistant_message_id": assistant_message_id,
+            "flow_action": decision.action,
+        },
+    )
+
+    await record_span(
+        trace_id=trace_id,
+        name="turn:total",
+        start_at=turn_start,
+        end_at=persist_end,
+        attrs={
+            "wall_ms": int((time.perf_counter() - wall_start) * 1000),
+            "route": route,
+            "has_answer": bool(answer),
+            "citations": len(citations),
+            "parked": decision.parked_flow is not None,
+            "flow_replaced": decision.replaced_flow is not None,
+            "output_violations": list(guarded.violations),
+            "persisted": True,
+            "persist_ms": persist_ms,
+        },
+    )
+
+    yield {"event": "done", "message_id": assistant_message_id}
+
+
 async def run_turn(
     message: str,
     conversation_id: int | None,
@@ -240,6 +503,74 @@ async def _run_turn_locked(
         if flow.expired:
             logger.info("会话流程已过期 conv=%s", cid)
 
+    # Ch08：同一个 client_message_id 重试时，先看这一轮是否已经回答过。
+    # 命中就直接回放已存内容——不跑图、不改 flow、不再写第二条助手消息。
+    if client_message_id is not None:
+        reply = await get_reply_by_client_message_id(
+            cid, client_message_id, session=session
+        )
+        if reply is not None:
+            user_message = await get_user_message_by_client_id(
+                cid, client_message_id, session=session
+            )
+            if user_message is not None:
+                async for frame in _replay_frames(
+                    cid=cid,
+                    reply=reply,
+                    user_message_id=user_message.id,
+                    trace_id=trace_id,
+                ):
+                    yield frame
+                return
+            logger.warning(
+                "找到助手回放但缺少用户消息 conv=%s client_message_id=%s",
+                cid,
+                client_message_id,
+            )
+
+    # Ch08：前端点「转人工」= 结构化动作，不跑分类/图，也不建工单。
+    # 复用 D 出口的固定话术；decide_flow 会清空当前流程。
+    if (selected_action or {}).get("type") == "transfer_human":
+        user_message_id = await save_user_message(
+            cid,
+            text or None,
+            client_message_id=client_message_id,
+            meta={"selected_action": selected_action},
+            session=session,
+        )
+        yield {
+            "event": "ack",
+            "conversation_id": cid,
+            "user_message_id": user_message_id,
+        }
+        yield {
+            "event": "route",
+            "route": "human",
+            "intent": "其他",
+            "resumed": False,
+        }
+
+        final = {
+            "route": "human",
+            "intent": "其他",
+            **await human_exit({}),
+        }
+        decision = decide_flow(final, parked=flow)
+        async for frame in _finalize_answer(
+            cid=cid,
+            trace_id=trace_id,
+            final=final,
+            decision=decision,
+            client_message_id=client_message_id,
+            capture=capture,
+            session=session,
+            turn_start=utcnow(),
+            wall_start=time.perf_counter(),
+            last_progress=None,
+        ):
+            yield frame
+        return
+
     # 槽位填充：先按「当前在等什么」解析这句话，命中就直接接回原出口
     slot = await slot_fill.fill(
         flow.pending_question if flow else None,
@@ -325,16 +656,33 @@ async def _run_turn_locked(
     }
 
     final: dict = {}
+    seen: dict = {}
+    last_progress: dict | None = None
     turn_start = utcnow()          # 整个轮次的起点，`turn:total` 用它
     node_started = turn_start
     wall_start = time.perf_counter()
 
     try:
-        async for chunk in engine.astream(state, stream_mode="updates"):
+        # subgraphs=True：拿到子图内部节点事件，用于 progress。
+        # 顶层 update 仍写 final；内部 update 只写 seen，不污染最终状态。
+        async for chunk in engine.astream(
+            state, stream_mode="updates", subgraphs=True
+        ):
             node_ended = utcnow()
-            for node_name, update in (chunk or {}).items():
+            namespace, chunk_update = chunk
+            for node_name, update in (chunk_update or {}).items():
                 update = update or {}
+
+                if namespace:
+                    seen.update(update)
+                    frame = node_frame(node_name, update, seen)
+                    if frame is not None and frame != last_progress:
+                        last_progress = frame
+                        yield frame
+                    continue
+
                 final.update(update)
+                seen.update(update)
                 await record_span(
                     trace_id=trace_id,
                     name=f"node:{node_name}",
@@ -355,7 +703,15 @@ async def _run_turn_locked(
                         "intent": update.get("intent"),
                         "resumed": bool(update.get("resumed")),
                     }
-            node_started = node_ended
+
+                frame = node_frame(node_name, update, final)
+                if frame is not None and frame != last_progress:
+                    last_progress = frame
+                    yield frame
+
+            # 只有顶层节点推进 span 计时；子图内部 chunk 不能把 duration 截短
+            if not namespace:
+                node_started = node_ended
     except Exception:
         await _save_error_message(cid, session)
         raise
@@ -364,87 +720,21 @@ async def _run_turn_locked(
     if captured is not None:
         final["refund_draft"] = captured
 
-    answer = final.get("answer") or ""
-    actions = list(final.get("actions") or [])
-
-    # 输出兜底：金额只能来自 compute / 工具结果，承诺和系统提示泄露一律整段替换。
-    # 必须在 delta 之前、落库之前——用户看到和回放的都得是 guard 之后的回答。
-    guarded = guard_answer(answer, output_context(final))
-    answer = guarded.answer
-    # actions 里可能有 `transfer_human`，也可能是 `resume_flow` / `park_flow` / `transfer_human` 的组合。
-    if guarded.action and guarded.action not in actions:
-        # 兜底动作：如果输出被替换成兜底回答，必须加一个转人工动作，避免用户看了回答却没出口。
-        actions.append(guarded.action)
-
-    # 本轮没接回、旧流程还在、又答完了新话题 → park：保留旧流程并提示
     decision = decide_flow(
         final,
         parked=flow if flow is not None and not slot.cancel else None,
         resumed=bool(resume_route),
     )
-    if decision.parked_flow:
-        answer = _with_park_notice(answer, decision.parked_flow)
-        actions.append({"type": "resume_flow", "flow": decision.parked_flow})
-    if decision.replaced_flow:
-        logger.info(
-            "流程被替换 conv=%s old=%s new=%s",
-            cid,
-            decision.replaced_flow,
-            decision.active_flow,
-        )
-
-    if capture is not None:
-        capture["final"] = final
-        capture["answer"] = answer
-        capture["actions"] = list(actions)
-        capture["violations"] = list(guarded.violations)
-
-    if answer:
-        yield {"delta": answer}
-
-    citations = final.get("citation_ids") or []
-    if citations:
-        yield {"event": "citations", "items": citations}
-
-    if actions:
-        yield {"event": "actions", "items": actions}
-
-    await record_span(
+    async for frame in _finalize_answer(
+        cid=cid,
         trace_id=trace_id,
-        name="turn:total",
-        start_at=turn_start,
-        end_at=utcnow(),
-        attrs={
-            "wall_ms": int((time.perf_counter() - wall_start) * 1000),
-            "route": final.get("route"),
-            "has_answer": bool(answer),
-            "citations": len(citations),
-            "parked": decision.parked_flow is not None,
-            "flow_replaced": decision.replaced_flow is not None,
-            "output_violations": list(guarded.violations),
-        },
-    )
-
-    # 助手消息落库失败不阻断回答：用户已经看到回复，下一轮回放会缺这一条
-    assistant_message_id: int | None = None
-    try:
-        async with session_scope(session) as s:
-            assistant_message_id = await save_assistant_message(
-                cid,
-                answer,
-                meta={
-                    "intent": final.get("intent"),
-                    "route": final.get("route"),
-                    "citation_ids": citations,
-                    "resumed": bool(final.get("resumed")),
-                },
-                session=s,
-            )
-            # 与助手消息同事务：不能出现「消息写了、流程没写」的半截状态
-            await apply_flow_decision(cid, decision, session=s)
-    except Exception:
-        # 事务回滚了：不要把可能已 flush 的自增 id 发出去
-        assistant_message_id = None
-        logger.exception("助手消息/流程落库失败 conv=%s", cid)
-
-    yield {"event": "done", "message_id": assistant_message_id}
+        final=final,
+        decision=decision,
+        client_message_id=client_message_id,
+        capture=capture,
+        session=session,
+        turn_start=turn_start,
+        wall_start=wall_start,
+        last_progress=last_progress,
+    ):
+        yield frame

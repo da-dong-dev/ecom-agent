@@ -77,6 +77,8 @@ def diff(
 
     if missing := sql_idx - orm_idx:
         problems.append(f"索引只在 schema.sql 里: {sorted(missing)}")
+    if extra := orm_idx - sql_idx:
+        problems.append(f"索引只在 ORM 里: {sorted(extra)}")
     return problems
 
 

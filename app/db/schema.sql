@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS messages (
   tool_call_id      TEXT,                            -- tool 消息对应的调用 id
   status            TEXT,                            -- C1 completed / cancelled / error
   client_message_id TEXT,                            -- K4 幂等键（重试时复用）
-  meta              TEXT,                            -- JSON：intent / route / citation_ids
+  reply_to_client_message_id TEXT,                   -- Ch08：回复的是哪条用户消息（重试回放）
+  meta              TEXT,                            -- JSON：intent / route / citation_ids / actions / signals
   created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at);
@@ -37,6 +38,10 @@ CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at)
 CREATE UNIQUE INDEX IF NOT EXISTS uk_msg_idem
   ON messages(conversation_id, client_message_id)
   WHERE client_message_id IS NOT NULL;
+-- Ch08：一条用户消息最多一条助手回复；用户消息/旧消息该列为 NULL，不进索引
+CREATE UNIQUE INDEX IF NOT EXISTS uk_msg_reply
+  ON messages(conversation_id, reply_to_client_message_id)
+  WHERE reply_to_client_message_id IS NOT NULL;
 
 -- 工单：转人工时创建；request_id 保证一次请求只建一张
 CREATE TABLE IF NOT EXISTS tickets (

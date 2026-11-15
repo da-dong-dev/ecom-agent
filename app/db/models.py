@@ -73,7 +73,10 @@ class Message(Base):
     tool_call_id: Mapped[str | None] = mapped_column(String)
     status: Mapped[str | None] = mapped_column(String)                    # C1 completed/cancelled/error
     client_message_id: Mapped[str | None] = mapped_column(String)         # K4 幂等键
-    meta: Mapped[str | None] = mapped_column(Text)                        # JSON intent/route/citation_ids
+    # Ch08：助手消息回复的是哪条用户消息（K4 重试回放）。
+    # 用户消息与旧消息为 NULL；错误消息也不写，保证重试不会回放错误结果。
+    reply_to_client_message_id: Mapped[str | None] = mapped_column(String)
+    meta: Mapped[str | None] = mapped_column(Text)                        # JSON intent/route/citation_ids/actions/signals
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, **_created_at)
 
     __table_args__ = (
@@ -86,6 +89,15 @@ class Message(Base):
             "client_message_id",
             unique=True,
             sqlite_where=text("client_message_id IS NOT NULL"),
+        ),
+        # Ch08：一条用户消息最多一条助手回复。
+        # 只约束助手消息；用户消息/旧消息该列为 NULL，不进索引。
+        Index(
+            "uk_msg_reply",
+            "conversation_id",
+            "reply_to_client_message_id",
+            unique=True,
+            sqlite_where=text("reply_to_client_message_id IS NOT NULL"),
         ),
     )
 

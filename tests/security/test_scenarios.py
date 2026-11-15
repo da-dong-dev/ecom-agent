@@ -36,9 +36,9 @@ class FakeGraph:
     def __init__(self, chunks: list[dict]) -> None:
         self.chunks = chunks
 
-    async def astream(self, state, stream_mode="updates"):
+    async def astream(self, state, stream_mode="updates", subgraphs=False):
         for chunk in self.chunks:
-            yield chunk
+            yield ((), chunk) if subgraphs else chunk
 
 
 @pytest_asyncio.fixture(autouse=True)
