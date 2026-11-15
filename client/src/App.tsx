@@ -1,14 +1,17 @@
 import { Flex, Tag, Typography } from "antd";
 import { useReducer, useRef, useState } from "react";
 
+import { ActionBar } from "./components/ActionBar";
 import { ChatWindow } from "./components/ChatWindow";
 import { Composer } from "./components/Composer";
+import { ProgressPanel } from "./components/ProgressPanel";
 import { ApiError } from "./lib/base";
 import { sendChat } from "./lib/sse";
 import {
   initialTurnState,
   newClientMessageId,
   turnReducer,
+  type AssistantAction,
 } from "./state/turn";
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -28,11 +31,12 @@ export default function App() {
     text: string,
     clientMessageId: string,
     retry: boolean,
+    selectedAction: AssistantAction | null = null,
   ): Promise<void> {
     if (retry) {
       dispatch({ type: "retry" });
     } else {
-      dispatch({ type: "begin", text, clientMessageId });
+      dispatch({ type: "begin", text, clientMessageId, selectedAction });
     }
 
     const controller = new AbortController();
@@ -44,6 +48,7 @@ export default function App() {
         message: text,
         conversationId: state.conversationId,
         clientMessageId,
+        selectedAction,
         signal: controller.signal,
         onFrame: (frame) => {
           if (frame.event === "error" && typeof frame.message === "string") {
@@ -81,12 +86,8 @@ export default function App() {
 
   async function handleSend(text: string): Promise<void> {
     const clientMessageId = newClientMessageId();
-    try {
-      localStorage.setItem("lastClientMessageId", clientMessageId);
-    } catch {
-      // localStorage 不可用时只影响调试，不影响发送
-    }
-    await runChat(text, clientMessageId, false);
+    rememberClientMessageId(clientMessageId);
+    await runChat(text, clientMessageId, false, null);
   }
 
   async function handleRetry(): Promise<void> {
@@ -96,13 +97,59 @@ export default function App() {
     if (!lastUser || !state.lastClientMessageId) {
       return;
     }
-    await runChat(lastUser.content, state.lastClientMessageId, true);
+
+    try {
+      await runChat(
+        lastUser.content,
+        state.lastClientMessageId,
+        true,
+        state.lastSelectedAction,
+      );
+    } catch {
+      // runChat 已经写入 error；这里只需要避免未处理的 Promise rejection。
+    }
+  }
+
+  async function handleAction(action: AssistantAction): Promise<void> {
+    if (state.inFlight) {
+      return;
+    }
+
+    const text = actionLabel(action);
+    const clientMessageId = newClientMessageId();
+    rememberClientMessageId(clientMessageId);
+    const selectedAction = action.type === "resume_flow" ? null : action;
+
+    try {
+      await runChat(text, clientMessageId, false, selectedAction);
+    } catch {
+      // runChat 已经写入 error；动作卡片没有输入框需要恢复。
+    }
   }
 
   function handleStop() {
     abortRef.current?.abort();
     dispatch({ type: "abort" });
   }
+
+  const lastAssistant = [...state.messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+  const lastUser = [...state.messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const visibleActions = (lastAssistant?.actions ?? []).filter((action) => {
+    // 转人工成功后的回复仍带 transfer_human；用户消息已经是“转人工”时不再重复展示按钮。
+    if (action.type !== "transfer_human") {
+      return true;
+    }
+    return lastUser?.content !== "转人工";
+  });
+  const showSide =
+    Boolean(state.route) ||
+    state.progress.length > 0 ||
+    state.inFlight ||
+    visibleActions.length > 0;
 
   return (
     <main className="app-shell">
@@ -127,15 +174,34 @@ export default function App() {
         ) : null}
       </Flex>
 
-      <ChatWindow
-        messages={state.messages}
-        inFlight={state.inFlight}
-        error={state.error}
-        retryDisabled={cooldown || state.messages.length === 0}
-        onRetry={() => {
-          void handleRetry();
-        }}
-      />
+      <div className="workspace">
+        <ChatWindow
+          messages={state.messages}
+          inFlight={state.inFlight}
+          error={state.error}
+          retryDisabled={cooldown || state.messages.length === 0}
+          onRetry={() => {
+            void handleRetry();
+          }}
+        />
+
+        {showSide ? (
+          <aside className="side-panel">
+            <ProgressPanel
+              route={state.route}
+              progress={state.progress}
+              inFlight={state.inFlight}
+            />
+            <ActionBar
+              actions={visibleActions}
+              disabled={state.inFlight || cooldown}
+              onAction={(action) => {
+                void handleAction(action);
+              }}
+            />
+          </aside>
+        ) : null}
+      </div>
 
       <Composer
         inFlight={state.inFlight}
@@ -145,6 +211,31 @@ export default function App() {
       />
     </main>
   );
+}
+
+function rememberClientMessageId(clientMessageId: string): void {
+  try {
+    localStorage.setItem("lastClientMessageId", clientMessageId);
+  } catch {
+    // localStorage 不可用时只影响调试，不影响发送
+  }
+}
+
+function actionLabel(action: AssistantAction): string {
+  switch (action.type) {
+    case "transfer_human":
+      return "转人工";
+    case "select_order":
+      return `选择订单 ${String(action.order_id ?? "")}`.trim();
+    case "select_sku":
+      return `选择型号 ${String(action.sku_id ?? "")}`.trim();
+    case "select_spec":
+      return `选择规格 ${String(action.spec ?? "")}`.trim();
+    case "resume_flow":
+      return action.flow === "refund" ? "继续退费" : "继续";
+    default:
+      return action.type;
+  }
 }
 
 function errorMessage(error: unknown): string {

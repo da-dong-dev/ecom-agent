@@ -170,6 +170,24 @@ describe("turnReducer", () => {
     expect(state.lastClientMessageId).toBe("cm-1");
   });
 
+  it("keeps selected_action for retry", () => {
+    const selected = { type: "select_order", order_id: "1002" };
+    let state = turnReducer(initialTurnState(), {
+      type: "begin",
+      text: "选择订单 1002",
+      clientMessageId: "cm-2",
+      selectedAction: selected,
+    });
+
+    expect(state.lastSelectedAction).toEqual(selected);
+
+    state = frame(state, { event: "error", message: "网络异常" });
+    state = turnReducer(state, { type: "retry" });
+
+    expect(state.lastSelectedAction).toEqual(selected);
+    expect(state.messages).toHaveLength(1);
+  });
+
   it("abort stops without an error banner", () => {
     let state = begin();
     state = turnReducer(state, { type: "abort" });

@@ -563,6 +563,68 @@ npm --prefix client run typecheck / test / build
 - 还没有真实后端联调；Task 8 用单测覆盖 reducer 与请求层，Task 12 做四场景手工验收。
 - 输入保留策略：成功才清空；错误时保留原文本。
 
+---
+
+## 9 · 进度面板 + 动作卡片 + 转人工（2026-11-16）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/components/ProgressPanel.tsx` | antd `Steps` / `Card` / `Grid`：规则/知识/数据/兜底/转人工的步骤；移动端折叠成状态条 |
+| `client/src/components/ActionBar.tsx` | antd `Card` / `Button` / `Space`：转人工、订单/型号/规格卡片、继续流程 |
+| `client/src/lib/format.ts` | 分 → 元：`formatAmount` |
+| `client/src/components/actions.test.tsx` | 7 条：转人工、订单/型号/规格 payload、继续流程、禁用、未知动作 |
+| `client/src/components/progress.test.tsx` | 5 条：退款三态、等待补充、转人工、知识步骤、金额格式化 |
+| `client/src/test/setup.ts` | RTL cleanup + jsdom `matchMedia` mock |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `App.tsx` | 只有聊天窗/输入框 | `workspace` 两栏；接入 `ProgressPanel` / `ActionBar`；`handleAction` | 进度和动作需要可见、可点击 |
+| `state/turn.ts` | 不保存 `selected_action` | 增加 `lastSelectedAction`，重试时复用 | 结构化动作重试不能退化成自然语言 |
+| `App.tsx › visibleActions` | 无 | 最后一个 assistant 的动作；转人工成功后过滤掉重复 transfer 按钮 | 转人工回复本身也带 transfer_human，不能无限重复 |
+| `styles.css` | 单栏聊天 | 两栏 + 侧栏 + 移动端堆叠 | 进度/动作需要独立区域 |
+| `vite.config.ts` | 无 setupFiles | 加 `src/test/setup.ts` | antd 响应式组件需要 `matchMedia`；RTL 需要 cleanup |
+
+### 验证
+
+```bash
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run typecheck
+# 通过
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run test
+# 5 files, 36 tests passed
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run build
+# vite v5.4.21；dist JS 685.61 kB（gzip 218.35 kB）
+
+# dev 冒烟
+# VITE ready in 248 ms；GET 127.0.0.1:5190 → HTTP 200
+```
+
+### 关键行为
+
+- 退款：`已核对订单` → `已算出金额 ¥1249.00` → `等待您确认`；
+  追问时替换为 `等待您补充信息`；转人工时显示 `正在转接人工`。
+- 金额只来自 `progress.amount`，前端不自己算。
+- 动作 payload：
+  - `select_order` → `{type:"select_order", order_id}`
+  - `select_sku` → `{type:"select_sku", sku_id}`
+  - `select_spec` → `{type:"select_spec", spec}`
+  - `resume_flow` → 文本「继续退费」或「继续」
+  - `transfer_human` → `{type:"transfer_human"}`
+- 重试结构化动作时复用 `lastSelectedAction`，不会退化成纯文本。
+- 转人工成功后，最后一个用户消息是「转人工」，重复的 transfer 按钮会被过滤。
+
+### 边界
+
+- 历史恢复/会话列表在 Task 10；断流对账/重连在 Task 11。
+- 进度面板只显示语义步骤，不显示节点名/规则 id/置信度。
+- 移动端通过 antd `Grid` 断点折叠成一行状态条；完整步骤在桌面显示。
+- 构建仍超过 500 kB（antd）；Task 12 再评估 code split。
+
 ### 下一步
 
-- Task 9：进度面板 + 动作卡片 + 转人工按钮。
+- Task 10：历史恢复 + 会话列表。

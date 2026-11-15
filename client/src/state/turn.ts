@@ -35,10 +35,17 @@ export type TurnState = {
   route: string | null;
   error: string | null;
   lastClientMessageId: string | null;
+  /** 重试结构化动作时，必须复用同一个 selected_action。 */
+  lastSelectedAction: AssistantAction | null;
 };
 
 export type TurnAction =
-  | { type: "begin"; text: string; clientMessageId: string }
+  | {
+      type: "begin";
+      text: string;
+      clientMessageId: string;
+      selectedAction?: AssistantAction | null;
+    }
   | { type: "retry" }
   | { type: "frame"; frame: ChatFrame }
   | { type: "fail"; message: string }
@@ -69,6 +76,7 @@ export function initialTurnState(): TurnState {
     route: null,
     error: null,
     lastClientMessageId: null,
+    lastSelectedAction: null,
   };
 }
 
@@ -254,6 +262,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         route: null,
         progress: [],
         lastClientMessageId: action.clientMessageId,
+        lastSelectedAction: action.selectedAction ?? null,
         messages: [
           ...state.messages,
           {
