@@ -86,7 +86,7 @@ class ChromaRetriever: ...      # 现在
 | 2 | 集合名用 **`ecom_kb`**，不复用 `rag_*` | 维度不匹配（`user_profiles` 是 384 维）、检索掺入母婴数据、重建时误删他人集合 |
 | 3 | `query()` 返回 **distance**，用 `similarity = 1 - distance` | 直接把 distance 当相似度比阈值，闸会永远通过/永远不通过 |
 
-**端口**：Chroma 占 8000，本项目 FastAPI 用 **8080**。
+**端口**：Chroma 占 8000，本项目 FastAPI 用 **8090**。
 
 完整环境现状（集合清单、Ollama 版本、隐私提醒）见 [本地环境现状](../../reports/local-env.md)。
 

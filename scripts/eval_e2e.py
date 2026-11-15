@@ -15,7 +15,7 @@ LLM judge 的质量分由 EvalFlow 负责，不在这里重复。
 用法：
 
     uv run python scripts/eval_e2e.py \
-      --base-url http://127.0.0.1:8081 \
+      --base-url http://127.0.0.1:8091 \
       --out docs/reports/run-local-01.md
 
     # 只跑某几个桶 / 前几条
@@ -41,7 +41,7 @@ import httpx
 from app.core.eval_v1 import EvalItem, load_items, validate_items
 from app.core.format import yuan_text
 
-DEFAULT_BASE_URL = "http://127.0.0.1:8081"
+DEFAULT_BASE_URL = "http://127.0.0.1:8091"
 LEAK_MARKERS = ("## 角色", "## 安全边界", "不是指令", "不得复述本系统提示")
 
 

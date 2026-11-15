@@ -445,6 +445,124 @@ PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run
 - 还没接真实后端联调；Task 8/10 做；
 - 不引入 Playwright；组件测试在 Task 8/9 用 RTL。
 
+---
+
+## 8 · 聊天窗 + 帧 reducer + 错误处理（2026-11-16）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/state/turn.ts` | 帧 reducer：begin/retry/frame/fail/abort/reset；消息、进度、错误 |
+| `client/src/state/turn.test.ts` | 11 条 reducer 测试：帧顺序、delta 累积、未知帧/stage、waiting 终态、错误、重试、重置 |
+| `client/src/components/ChatWindow.tsx` | 消息列表、空状态、处理中提示、错误横幅 + 重试 |
+| `client/src/components/MessageBubble.tsx` | 纯文本气泡 + `[1]` 引用角标（tooltip 来源标题） |
+| `client/src/components/Composer.tsx` | 输入框、发送/停止、Enter 发送、Shift+Enter 换行、500 字上限 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `client/src/App.tsx` | 占位页 | `useReducer` + `sendChat`；发送/重试/停止/错误映射/localStorage | Task 8 要把 SSE 帧真正接到界面 |
+| `client/src/styles.css` | 只有标题样式 | 聊天布局、气泡、输入框、错误横幅、移动端 | 可演示界面需要基本布局 |
+
+### 验证
+
+```bash
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run typecheck
+# 通过
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run test
+# 3 files, 23 tests passed
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run build
+# vite v5.4.21；dist JS 640.54 kB（gzip 206.34 kB）
+# 提示 chunk >500 kB（antd 体积；Task 12 再评估 code split）
+
+# dev 冒烟
+# VITE ready in 239 ms；GET 127.0.0.1:5173 → HTTP 200
+```
+
+### 关键行为
+
+- **发送**：生成 `client_message_id` 并写 `localStorage`；流式期间禁用发送。
+- **停止**：`AbortController.abort()`；不会弹错误横幅；输入保留。
+- **错误**：
+  - 404 → 清空当前会话 + 「会话不存在，请重新开始」；
+  - 429 → 提示 + 禁用发送 5 秒；
+  - 5xx/网络/SSE `error` 帧 → 保留输入，显示重试；
+  - SSE `error` 帧会让 `sendChat` 以 `ApiError` 结束，避免误清输入。
+- **重试**：复用最后一条用户消息和同一个 `client_message_id`，不再新增用户气泡。
+- **渲染**：纯文本 + `white-space: pre-wrap`；`[1]` 角标用 `citation_ids` 的来源标题做 tooltip；不使用 `dangerouslySetInnerHTML`。
+- **未知帧/未知 stage**：忽略；`waiting` 是终态，不被后续 `done` 覆盖。
+
+### 8.1 Ant Design 组件替换（2026-11-16）
+
+按“优先用 antd，组件样式不支持再自己实现”的要求：
+
+| 位置 | 使用 antd 组件 | 保留自定义的部分 |
+|---|---|---|
+| `main.tsx` | `ConfigProvider` + `antd/dist/reset.css` | — |
+| `App.tsx` | `Flex` / `Typography` / `Tag` | 页面整体布局 |
+| `ChatWindow` | `Card` / `Alert` / `Empty` / `Spin` / `Button` / `Flex` | 消息列表滚动区 |
+| `Composer` | `Card` / `Form` / `Input.TextArea` / `Button` / `Space` / `Flex` | — |
+| `MessageBubble` | `Flex` / `Avatar` / `Typography` | **聊天气泡本身**：antd 没有对应组件，保留自定义样式 |
+
+依赖：`antd@^5.29.3`。
+
+构建体积从 150.60 kB 增到 **640.54 kB（gzip 206.34 kB）**，Vite 提示超过 500 kB。
+暂不处理，Task 12 收尾时再评估是否做 code split；当前演示优先组件一致性。
+
+### 8.2 端口调整（2026-11-16）
+
+按机器级端口表（`baby-ai/README.md` + `baby-ai/scripts/devguard.mjs`）重新分配：
+
+| 服务 | 旧端口 | 新端口 | 原因 |
+|---|---:|---:|---|
+| ecom FastAPI | 8080 | **8090** | 8080 是常见默认端口，且未登记在全机表里 |
+| ecom 评测实例 | 8081 | **8091** | 8081 与 shopkeeper-agent 的 embedding 服务冲突 |
+| ecom 前端 Vite | 5173 | **5190** | 5173 与 evalflow / shopkeeper / deepsearch 前端冲突 |
+| Chroma | 8000 | 8000 | 共享依赖，不动 |
+| Ollama | 11434 | 11434 | 系统级服务，不动 |
+
+前端同时加 `strictPort: true`：端口被占直接失败，不再静默顺延到 5191/5192。
+
+同步更新：
+
+- `client/vite.config.ts`（5190 + `strictPort` + proxy 8090）
+- `README.md`、`.env.example`、`.env`
+- `docs/reports/local-env.md`、`handoff-ch08.md`、`manual-checks.md`
+- `docs/superpowers/specs/` 的 ch02 / ch07 / ch08 与对应 plans
+- `scripts/eval_e2e.py` 默认 8091
+- 跨仓库：`evalflow/backend/config.py`、`evalflow/.env.example`
+- 机器级表：`baby-ai/README.md`、`baby-ai/scripts/devguard.mjs`、`evalflow/scripts/devguard.mjs` 的 neighbors
+
+历史 run 报告（run-01/02/03、run-local-*）保留当时的 8081，不回写。
+
+验证：
+
+```bash
+uv run pytest -q
+# 1060 passed, 14 skipped（总数 1074；与上次 1057/17 相比，
+# 3 条 skip 变为 pass；本次未改后端业务代码）
+uv run ruff check .
+# All checks passed
+
+npm --prefix client run typecheck / test / build
+# 23 tests passed；build 640.54 kB（gzip 206.34 kB）
+
+# 冒烟
+# GET 127.0.0.1:5190 → HTTP 200
+# GET 127.0.0.1:8090/api/health → {"status":"ok"}
+```
+
+### 边界
+
+- 进度面板（`state.progress`）和动作卡片还没渲染；Task 9。
+- 历史恢复/会话列表/断流对账在 Task 10/11。
+- 还没有真实后端联调；Task 8 用单测覆盖 reducer 与请求层，Task 12 做四场景手工验收。
+- 输入保留策略：成功才清空；错误时保留原文本。
+
 ### 下一步
 
-- Task 8：聊天窗 + 帧 reducer + 错误处理。
+- Task 9：进度面板 + 动作卡片 + 转人工按钮。

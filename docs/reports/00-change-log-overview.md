@@ -97,7 +97,7 @@ grep -rn "替换：Ch02 §1" docs/reports/
 | Ch05 | 多轮与上下文 | [ch05-multi-turn-changes.md](./ch05-multi-turn-changes.md) | ✅ 11 / 11 节（验收见 [ch05-acceptance.md](./ch05-acceptance.md)） |
 | Ch06 | 安全 | [ch06-security-changes.md](./ch06-security-changes.md) | ✅ 6 / 6 节（验收见 [ch06-acceptance.md](./ch06-acceptance.md)） |
 | Ch07 | 评测 | [ch07-eval-changes.md](./ch07-eval-changes.md) | ✅ 10 / 10（验收见 [ch07-acceptance.md](./ch07-acceptance.md)） |
-| Ch08 | 前端 | [ch08-frontend-changes.md](./ch08-frontend-changes.md) | 🚧 Task 7 完成 |
+| Ch08 | 前端 | [ch08-frontend-changes.md](./ch08-frontend-changes.md) | 🚧 Task 8 完成 |
 
 ## 与其他报告的关系
 

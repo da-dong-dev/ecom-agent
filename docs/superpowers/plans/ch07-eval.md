@@ -226,7 +226,7 @@ app.include_router(eval_router)
 
 **Step 1: 指标**
 
-`scripts/eval_e2e.py --base-url http://127.0.0.1:8081`：
+`scripts/eval_e2e.py --base-url http://127.0.0.1:8091`：
 
 | 指标 | 判法 |
 |---|---|
@@ -266,7 +266,7 @@ app.include_router(eval_router)
 **Step 1: 配置**
 
 ```python
-ecom_base_url: str = "http://127.0.0.1:8081"
+ecom_base_url: str = "http://127.0.0.1:8091"
 ecom_timeout: int = 120
 ecom_max_rpm: int = 30
 ```
@@ -358,13 +358,13 @@ DATABASE_URL=sqlite+aiosqlite:///./data/eval.db \
 uv run python scripts/seed_eval.py
 ENABLE_EVAL_API=true \
 DATABASE_URL=sqlite+aiosqlite:///./data/eval.db \
-uv run uvicorn app.main:app --port 8081       # 不加 --reload
+uv run uvicorn app.main:app --port 8091       # 不加 --reload
 ```
 
 **Step 2: 起 EvalFlow**
 
 ```bash
-EVAL_TARGET=ecom ECOM_BASE_URL=http://127.0.0.1:8081 \
+EVAL_TARGET=ecom ECOM_BASE_URL=http://127.0.0.1:8091 \
 uv run uvicorn backend.main:app --port 8002
 # 另开 worker，环境变量同上
 ```

@@ -334,7 +334,7 @@ FALLBACK = "关于「{topic}」，我这边没有找到确切的依据，不能�
 
 | 服务 | 端口 | 说明 |
 |---|---|---|
-| **FastAPI（本项目）** | **8080** | 原计划 8000，与本地 Chroma 冲突 |
+| **FastAPI（本项目）** | **8090** | 原计划 8000，与本地 Chroma 冲突 |
 | Chroma（Docker） | 8000 | 已运行，baby-ai 侧依赖，不动 |
 | Ollama | 11434 | bge-m3:latest（1024 维） |
 
@@ -356,7 +356,7 @@ FALLBACK = "关于「{topic}」，我这边没有找到确切的依据，不能�
 **端到端验收（curl）**：
 
 ```bash
-curl -N -X POST localhost:8080/api/chat -H 'content-type: application/json' \
+curl -N -X POST localhost:8090/api/chat -H 'content-type: application/json' \
   -d '{"message":"退货政策是什么"}'
 # 期望：route=knowledge → delta → citations → done
 
@@ -395,7 +395,7 @@ curl -N ... -d '{"message":"我这单能退多少"}'
 | 闸的输入 | **余弦相似度（1 - distance）** | 直接用 RRF 分数：量纲差一个数量级（RRF 最大约 0.033），闸永远不通过 |
 | 向量空间 | **显式 `space=cosine`** | 用 Chroma 默认 l2：距离越小越相似，闸的语义反转 |
 | 集合命名 | **`ecom_kb`，独立专用** | 复用 `rag_docs` 等：维度/空间不匹配，且检索掺入母婴数据 |
-| HTTP 端口 | **8080** | 用 8000：与本地常驻 Chroma 冲突，服务起不来 |
+| HTTP 端口 | **8090** | 用 8000：与本地常驻 Chroma 冲突，服务起不来 |
 | 检索参数 | **top20 / k=60 照抄通行值，标"未校准"** | 为 30 个 chunk 调参：必然过拟合 10 题评测 |
 | prompt 结构 | **先搭四区中的三区** | Ch06 才补工具结果区与输出校验 |
 | evidence 存储 | **本章存全量** | 与 D6 的 B+ 冲突：A 出口生成需要原文，Ch05 收窄为 citation_ids |

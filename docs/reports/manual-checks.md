@@ -149,8 +149,8 @@ uv run python scripts/try.py graph "谢谢"
 ### ⏳ Task 9 · /api/chat + trace
 
 ```bash
-uv run uvicorn app.main:app --reload --port 8080 &
-curl -N -X POST localhost:8080/api/chat -H 'content-type: application/json' \
+uv run uvicorn app.main:app --reload --port 8090 &
+curl -N -X POST localhost:8090/api/chat -H 'content-type: application/json' \
      -d '{"message":"退货政策是什么"}'
 ```
 

@@ -102,18 +102,18 @@ uv run pytest -q
 # ecom 评测实例
 ENABLE_EVAL_API=true \
 DATABASE_URL=sqlite+aiosqlite:///./data/eval.db \
-uv run uvicorn app.main:app --port 8081
+uv run uvicorn app.main:app --port 8091
 
 # 确定性 44 条
 uv run python scripts/eval_e2e.py \
-  --base-url http://127.0.0.1:8081 \
+  --base-url http://127.0.0.1:8091 \
   --out docs/reports/run-local-06.md
 
 # EvalFlow（另开仓库）
 cd /Users/lidong/Desktop/workFile/evalflow
-EVAL_TARGET=ecom ECOM_BASE_URL=http://127.0.0.1:8081 \
+EVAL_TARGET=ecom ECOM_BASE_URL=http://127.0.0.1:8091 \
   uv run uvicorn backend.main:app --port 8002
-EVAL_TARGET=ecom ECOM_BASE_URL=http://127.0.0.1:8081 \
+EVAL_TARGET=ecom ECOM_BASE_URL=http://127.0.0.1:8091 \
   uv run celery -A backend.celery_app worker --pool=threads --concurrency=2
 ```
 

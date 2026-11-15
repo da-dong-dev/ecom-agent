@@ -619,7 +619,7 @@ final = {
 
 ```ts
 server: {
-  proxy: { "/api": "http://127.0.0.1:8080" },
+  proxy: { "/api": "http://127.0.0.1:8090" },
 }
 ```
 
@@ -950,7 +950,7 @@ npm run build
 ```bash
 # 后端
 uv run python scripts/migrate_ch08.py --db data/app.db
-uv run uvicorn app.main:app --reload --port 8080
+uv run uvicorn app.main:app --reload --port 8090
 
 # 前端
 cd client && npm install && npm run dev

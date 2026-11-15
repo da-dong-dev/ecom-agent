@@ -66,7 +66,7 @@
 | 测试 | Vitest + React Testing Library + jsdom | 纯函数与组件测试；Ch08 不引入 Playwright |
 | 样式 | CSS Modules / plain CSS | 不引入 UI 框架，避免把演示项目做成组件库练习 |
 | 请求 | `fetch` + `ReadableStream` | 不引入 axios；`AbortController` 支持停止 |
-| 开发联调 | Vite proxy `/api` → `127.0.0.1:8080` | 不改后端 CORS |
+| 开发联调 | Vite proxy `/api` → `127.0.0.1:8090` | 不改后端 CORS |
 | 后端 | 沿用 FastAPI + SQLAlchemy + SQLite | 不引入新运行时依赖 |
 | 流式 | LangGraph `astream(..., subgraphs=True)` | 1.2.18 同版本最小图已验证；项目图接入前先做 spike |
 
