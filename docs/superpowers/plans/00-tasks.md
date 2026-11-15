@@ -173,11 +173,18 @@ D 的建单（P4-3）仍待做。
 
 ---
 
-## P8 · 前端（3 天）
+## P8 · 前端（8–11 人日）
+
+> **执行说明（2026-11-14）**：Ch08 的实际范围比原 P8 大，已拆成
+> [ch08-frontend.md](./ch08-frontend.md) 的 Task 0–12：
+> **后端契约 Task 0–6 + 前端 Task 7–11 + 验收 Task 12**。
+> 原 P8-1…P8-6 对应前端/验收部分；工作量重估见
+> [ch08-frontend-design.md](../specs/ch08-frontend-design.md) §10。
 
 | # | 任务 | 依据 | 产出 | 验收 | 状态 |
 |---|---|---|---|---|---|
-| P8-1 | 前端脚手架（Vite + React） | L4 | `client/` | 起得来 | ⏳ |
+| P8-0 | 后端契约：历史接口 / 回放 / progress / 转人工 / 迁移 | Ch08 spec | `app/api/*`、`scripts/migrate_ch08.py` | 见 plan Task 0–6 | ✅ |
+| P8-1 | 前端脚手架（Vite + React） | L4 | `client/` | 起得来 | ✅ |
 | P8-2 | 聊天 + SSE 流式 | L4 | — | 流式渲染正常 | ⏳ |
 | P8-3 | 进度面板 | L4 | — | 三状态可切换 | ⏳ |
 | P8-4 | 转人工入口 | D4 | — | 点击可触发 | ⏳ |
