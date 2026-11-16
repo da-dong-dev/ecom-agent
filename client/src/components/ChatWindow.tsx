@@ -7,6 +7,8 @@ type Props = {
   messages: ChatMessage[];
   inFlight: boolean;
   error: string | null;
+  /** 断流/用户停止：内容保留，按钮文案改为“继续”。 */
+  interrupted?: boolean;
   retryDisabled?: boolean;
   onRetry: () => void;
 };
@@ -15,6 +17,7 @@ export function ChatWindow({
   messages,
   inFlight,
   error,
+  interrupted = false,
   retryDisabled = false,
   onRetry,
 }: Props) {
@@ -45,12 +48,12 @@ export function ChatWindow({
 
       {error ? (
         <Alert
-          type="error"
+          type={interrupted ? "warning" : "error"}
           showIcon
           message={error}
           action={
             <Button size="small" onClick={onRetry} disabled={retryDisabled}>
-              重试
+              {interrupted ? "继续" : "重试"}
             </Button>
           }
         />

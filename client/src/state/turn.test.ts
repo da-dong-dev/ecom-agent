@@ -99,6 +99,28 @@ describe("turnReducer", () => {
     expect(state.messages[1].content).toBe("你好");
   });
 
+  it("starts a new assistant bubble after the latest user message", () => {
+    let state = begin();
+    state = frame(state, { delta: "第一轮回答" });
+    state = frame(state, { event: "done", message_id: 35 });
+
+    state = turnReducer(state, {
+      type: "begin",
+      text: "订单1003 到哪了",
+      clientMessageId: "cm-2",
+    });
+    state = frame(state, { delta: "第二轮回答" });
+
+    expect(state.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(state.messages[1].content).toBe("第一轮回答");
+    expect(state.messages[3].content).toBe("第二轮回答");
+  });
+
   it("ignores unknown frames and unknown progress stages", () => {
     const state = begin();
 
@@ -166,8 +188,44 @@ describe("turnReducer", () => {
 
     expect(state.inFlight).toBe(true);
     expect(state.error).toBeNull();
+    expect(state.interrupted).toBe(false);
     expect(state.messages).toHaveLength(1);
     expect(state.lastClientMessageId).toBe("cm-1");
+  });
+
+  it("retry drops the unfinished assistant draft of the current turn", () => {
+    let state = begin();
+    state = frame(state, {
+      event: "ack",
+      conversation_id: 12,
+      user_message_id: 34,
+    });
+    state = frame(state, { delta: "部分回答" });
+    state = turnReducer(state, {
+      type: "interrupt",
+      message: "连接中断，请点击继续",
+    });
+
+    state = turnReducer(state, { type: "retry" });
+
+    expect(state.messages.map((message) => message.role)).toEqual(["user"]);
+    expect(state.messages[0].content).toBe("订单1002 不想要了");
+    expect(state.interrupted).toBe(false);
+  });
+
+  it("interrupt keeps local content and offers continue", () => {
+    let state = begin();
+    state = frame(state, { delta: "部分回答" });
+
+    state = turnReducer(state, {
+      type: "interrupt",
+      message: "连接中断，请点击继续",
+    });
+
+    expect(state.inFlight).toBe(false);
+    expect(state.interrupted).toBe(true);
+    expect(state.error).toBe("连接中断，请点击继续");
+    expect(state.messages[1].content).toBe("部分回答");
   });
 
   it("keeps selected_action for retry", () => {

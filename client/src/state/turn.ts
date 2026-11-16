@@ -34,6 +34,8 @@ export type TurnState = {
   progress: Progress[];
   route: string | null;
   error: string | null;
+  /** 连接中断/用户停止：内容保留，允许用同一个 client_message_id 继续。 */
+  interrupted: boolean;
   lastClientMessageId: string | null;
   /** 重试结构化动作时，必须复用同一个 selected_action。 */
   lastSelectedAction: AssistantAction | null;
@@ -48,7 +50,9 @@ export type TurnAction =
     }
   | { type: "retry" }
   | { type: "frame"; frame: ChatFrame }
+  | { type: "history"; state: TurnState }
   | { type: "fail"; message: string }
+  | { type: "interrupt"; message?: string }
   | { type: "abort" }
   | { type: "reset" };
 
@@ -75,6 +79,7 @@ export function initialTurnState(): TurnState {
     progress: [],
     route: null,
     error: null,
+    interrupted: false,
     lastClientMessageId: null,
     lastSelectedAction: null,
   };
@@ -88,15 +93,6 @@ export function newClientMessageId(): string {
   return `cm-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function lastAssistantIndex(messages: ChatMessage[]): number {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].role === "assistant") {
-      return index;
-    }
-  }
-  return -1;
-}
-
 function lastUserIndex(messages: ChatMessage[]): number {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index].role === "user") {
@@ -106,8 +102,28 @@ function lastUserIndex(messages: ChatMessage[]): number {
   return -1;
 }
 
+/** 只找“当前用户消息之后”的助手消息，避免把新一轮 delta 追加到上一轮回答上。 */
+function lastAssistantAfterLastUserIndex(messages: ChatMessage[]): number {
+  const userIndex = lastUserIndex(messages);
+  if (userIndex < 0) {
+    return -1;
+  }
+  for (let index = messages.length - 1; index > userIndex; index -= 1) {
+    if (messages[index].role === "assistant") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+/** 重试前丢掉当前轮未完成的助手草稿，避免回放 delta 时叠在旧草稿上。 */
+function dropAssistantAfterLastUser(messages: ChatMessage[]): ChatMessage[] {
+  const userIndex = lastUserIndex(messages);
+  return userIndex < 0 ? messages : messages.slice(0, userIndex + 1);
+}
+
 function appendDelta(state: TurnState, delta: string): TurnState {
-  const index = lastAssistantIndex(state.messages);
+  const index = lastAssistantAfterLastUserIndex(state.messages);
   if (index < 0) {
     return {
       ...state,
@@ -127,7 +143,7 @@ function patchAssistant(
   state: TurnState,
   patch: Partial<ChatMessage>,
 ): TurnState {
-  const index = lastAssistantIndex(state.messages);
+  const index = lastAssistantAfterLastUserIndex(state.messages);
   if (index < 0) {
     return {
       ...state,
@@ -140,7 +156,9 @@ function patchAssistant(
   return { ...state, messages };
 }
 
-function isAction(value: unknown): value is AssistantAction {
+export function isAssistantAction(
+  value: unknown,
+): value is AssistantAction {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -225,7 +243,7 @@ export function applyFrame(state: TurnState, frame: ChatFrame): TurnState {
 
     case "actions": {
       const actions = Array.isArray(frame.items)
-        ? frame.items.filter(isAction)
+        ? frame.items.filter(isAssistantAction)
         : [];
       return patchAssistant(state, { actions });
     }
@@ -234,7 +252,7 @@ export function applyFrame(state: TurnState, frame: ChatFrame): TurnState {
       const id =
         typeof frame.message_id === "number" ? frame.message_id : undefined;
       return patchAssistant(
-        { ...state, inFlight: false, error: null },
+        { ...state, inFlight: false, error: null, interrupted: false },
         { id },
       );
     }
@@ -244,7 +262,12 @@ export function applyFrame(state: TurnState, frame: ChatFrame): TurnState {
         typeof frame.message === "string"
           ? frame.message
           : "服务暂时不可用，请稍后重试";
-      return { ...state, inFlight: false, error: message };
+      return {
+        ...state,
+        inFlight: false,
+        error: message,
+        interrupted: false,
+      };
     }
 
     default:
@@ -259,6 +282,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         ...state,
         inFlight: true,
         error: null,
+        interrupted: false,
         route: null,
         progress: [],
         lastClientMessageId: action.clientMessageId,
@@ -274,23 +298,41 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
       };
 
     case "retry":
-      // 重试复用最后一条用户消息，不再新增气泡。
+      // 重试复用最后一条用户消息，不再新增气泡；丢掉上一轮未完成的助手草稿。
       return {
         ...state,
         inFlight: true,
         error: null,
+        interrupted: false,
         route: null,
         progress: [],
+        messages: dropAssistantAfterLastUser(state.messages),
       };
 
     case "frame":
       return applyFrame(state, action.frame);
 
+    case "history":
+      return action.state;
+
     case "fail":
-      return { ...state, inFlight: false, error: action.message };
+      return {
+        ...state,
+        inFlight: false,
+        error: action.message,
+        interrupted: false,
+      };
+
+    case "interrupt":
+      return {
+        ...state,
+        inFlight: false,
+        error: action.message ?? "连接中断，请点击继续",
+        interrupted: true,
+      };
 
     case "abort":
-      return { ...state, inFlight: false };
+      return { ...state, inFlight: false, interrupted: false };
 
     case "reset":
       return initialTurnState();

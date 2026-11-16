@@ -33,7 +33,6 @@ describe("ProgressPanel", () => {
         route="rules"
         inFlight={false}
         progress={[
-          { stage: "checking_order", status: "done" },
           {
             stage: "waiting_info",
             status: "waiting",
@@ -44,6 +43,8 @@ describe("ProgressPanel", () => {
     );
 
     expect(screen.getByText("等待您补充信息")).toBeTruthy();
+    expect(screen.queryByText("已核对订单")).toBeNull();
+    expect(screen.queryByText("正在核对订单")).toBeNull();
     expect(screen.queryByText(/已算出金额/)).toBeNull();
   });
 

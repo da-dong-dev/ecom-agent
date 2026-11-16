@@ -52,16 +52,17 @@ function buildSteps(
     amount === undefined ? "已算出金额" : `已算出金额 ${formatAmount(amount)}`;
 
   if (route === "rules") {
-    const steps: PanelStep[] = [
-      {
+    const steps: PanelStep[] = [];
+    if (byStage.has("checking_order") || !byStage.has("waiting_info")) {
+      steps.push({
         key: "checking_order",
         title: byStage.has("checking_order") ? "已核对订单" : "正在核对订单",
         status: statusOf(
           byStage.get("checking_order"),
           inFlight ? "process" : "wait",
         ),
-      },
-    ];
+      });
+    }
 
     if (byStage.has("waiting_info")) {
       steps.push({
@@ -145,16 +146,17 @@ function buildSteps(
   }
 
   if (route === "data") {
-    const steps: PanelStep[] = [
-      {
+    const steps: PanelStep[] = [];
+    if (byStage.has("querying_data") || !byStage.has("waiting_info")) {
+      steps.push({
         key: "querying_data",
         title: byStage.has("querying_data") ? "已查到数据" : "正在查询数据",
         status: statusOf(
           byStage.get("querying_data"),
           inFlight ? "process" : "wait",
         ),
-      },
-    ];
+      });
+    }
     if (byStage.has("waiting_info")) {
       steps.push({
         key: "waiting_info",

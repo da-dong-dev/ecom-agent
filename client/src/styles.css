@@ -17,7 +17,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 880px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 24px 20px 20px;
   gap: 16px;
@@ -32,6 +32,57 @@ body {
   flex: 1;
   min-height: 0;
   gap: 16px;
+}
+
+.conversation-panel {
+  flex: none;
+  width: 220px;
+  overflow-y: auto;
+}
+
+.conversation-card {
+  border: 1px solid #e5e7eb;
+}
+
+.conversation-card .ant-card-body {
+  padding: 8px;
+}
+
+.conversation-item {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 8px !important;
+}
+
+.conversation-item.active {
+  background: #eff6ff;
+}
+
+.conversation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.conversation-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.conversation-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.conversation-time {
+  font-size: 12px;
 }
 
 .chat-card {
@@ -150,6 +201,11 @@ body {
 @media (max-width: 900px) {
   .workspace {
     flex-direction: column;
+  }
+
+  .conversation-panel {
+    width: 100%;
+    max-height: 180px;
   }
 
   .side-panel {
