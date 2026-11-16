@@ -5,7 +5,7 @@ from app.core.react import ReactResult
 from app.graph import fallback_agent, nodes
 from app.graph.build import build_graph
 from app.graph.fallback_agent import build_fallback_graph, needs_tools
-from app.graph.nodes import SOCIAL_REPLY, UNKNOWN_REPLY
+from app.graph.nodes import MULTI_INTENT_REPLY, SOCIAL_REPLY, UNKNOWN_REPLY
 
 
 @pytest.mark.parametrize(
@@ -38,6 +38,20 @@ async def test_gate_false_does_not_call_react(monkeypatch):
     result = await build_fallback_graph().ainvoke({"raw_query": "你好"})
 
     assert result["answer"] == SOCIAL_REPLY
+
+
+async def test_multi_intent_bypasses_react(monkeypatch):
+    async def boom(*args, **kwargs):
+        raise AssertionError("多意图应先澄清，不应进 ReAct")
+
+    monkeypatch.setattr(fallback_agent.react, "run", boom)
+
+    result = await build_fallback_graph().ainvoke(
+        {"raw_query": "我要退款，另外查物流", "multi_intent": True}
+    )
+
+    assert result["answer"] == MULTI_INTENT_REPLY
+    assert "actions" not in result
 
 
 async def test_agent_success_uses_react_answer(monkeypatch):

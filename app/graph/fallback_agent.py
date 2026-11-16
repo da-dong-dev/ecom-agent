@@ -64,6 +64,9 @@ async def scripted(state: ConversationState) -> dict:
 
 
 def after_gate(state: ConversationState) -> str:
+    if state.get("multi_intent"):
+        # 多意图先澄清，不要因为句子里有「物流」就进 ReAct 只答一半。
+        return "scripted"
     return "agent" if state.get("needs_tools") else "scripted"
 
 

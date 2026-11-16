@@ -7,6 +7,8 @@
 import pytest
 
 from app.graph.nodes import (
+    MULTI_INTENT_REPLY,
+    SELF_INTRO_REPLY,
     SOCIAL_REPLY,
     THANKS_REPLY,
     UNKNOWN_REPLY,
@@ -39,6 +41,26 @@ async def test_social_script(text: str):
     result = await fallback_exit({"raw_query": text})
     assert result["answer"] == SOCIAL_REPLY
     assert result["is_placeholder"] is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["你是谁", "你叫什么", "你是机器人吗", "你是AI吗", "你能做什么", "你会什么"],
+)
+async def test_self_intro_script(text: str):
+    """身份/能力问题要回答，不能当成“没听懂”再推转人工。"""
+    result = await fallback_exit({"raw_query": text})
+    assert result["answer"] == SELF_INTRO_REPLY
+    assert "actions" not in result
+    assert result["is_placeholder"] is False
+
+
+async def test_multi_intent_asks_which_first():
+    result = await fallback_exit(
+        {"raw_query": "我要退款，另外查物流", "multi_intent": True}
+    )
+    assert result["answer"] == MULTI_INTENT_REPLY
+    assert "actions" not in result
 
 
 @pytest.mark.parametrize("text", ["谢谢", "多谢", "好的", "收到", "辛苦了"])

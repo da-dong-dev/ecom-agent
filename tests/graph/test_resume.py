@@ -16,6 +16,7 @@ async def test_classify_intent_resume_short_circuits(monkeypatch):
     assert result == {
         "intent": "退款申请",
         "intent_confidence": 1.0,
+        "multi_intent": False,
         "route": "rules",
         "resumed": True,
     }

@@ -159,6 +159,13 @@ async def intake(state: ConversationState) -> dict:
     order_id = extract_order_id(query)
     if not order_id:
         return {}
+
+    existing = state.get("order_id")
+    if existing and existing != order_id:
+        # 恢复轮补充的是原因/其他槽位，这句话里的数字（例如「111111」）
+        # 不能覆盖上一轮已经选定的订单。
+        return {}
+
     return {"order_id": order_id, "pending_question": None}
 
 
@@ -615,11 +622,32 @@ async def need_info(state: ConversationState) -> dict:
     return {}
 
 
+REASON_ACTIONS: tuple[dict, ...] = (
+    {
+        "type": "select_reason",
+        "reason_code": "quality",
+        "label": "商品有质量问题",
+    },
+    {
+        "type": "select_reason",
+        "reason_code": "no_reason",
+        "label": "不想要了",
+    },
+    {
+        "type": "select_reason",
+        "reason_code": "other",
+        "label": "其他原因",
+        "needs_text": True,
+    },
+)
+
+
 def _ask_reason() -> dict:
-    """要退款原因。代码问，不问模型——这句话是固定话术。"""
+    """要退款原因。代码问，不问模型——这句话和选项都是固定契约。"""
     return {
         "pending_question": "reason_code",
-        "answer": "请问您想退货的原因是什么？是商品有质量问题，还是不想要了？",
+        "answer": "请问您想退货的原因是什么？可以选下面的原因，也可以选「其他原因」补充说明。",
+        "actions": [dict(action) for action in REASON_ACTIONS],
         "is_placeholder": False,
     }
 

@@ -22,7 +22,7 @@ STAGE_LABELS: dict[str, str] = {
     "retrieving": "已检索知识库",
     "evidence_ready": "已找到依据",
     "working": "已处理",
-    "handoff": "正在转接人工",
+    "handoff": "已转接人工，等待接入",
 }
 
 
@@ -62,9 +62,12 @@ def node_frame(
     state: dict[str, Any],
 ) -> dict[str, Any] | None:
     """一个子图节点完成后对应的 progress 帧；没有就返回 `None`。"""
-    if node_name == "query_data":
-        # 已核对订单
-        return _frame("checking_order") if update.get("order_snapshot") else None
+    if node_name in {"validate", "query_data"}:
+        # 已核对订单。真实规则图在 validate 里查订单并写 order_snapshot；
+        # query_data 的 update 可能为空（复用 validate 的快照），所以两个节点都看
+        # “本节点 update + 已累积 state”，避免 live 进度漏掉“核对中”。
+        snapshot = update.get("order_snapshot") or state.get("order_snapshot")
+        return _frame("checking_order") if snapshot else None
 
     if node_name == "compliance":
         # 已算出金额（只有可退且合规才发）
@@ -116,7 +119,7 @@ def node_frame(
         return _frame("working")
 
     if node_name == "human":
-        # 正在转接人工
+        # 已转接人工，等待接入
         return _frame("handoff", status="waiting")
 
     return None
@@ -127,13 +130,19 @@ def final_frame(
     route: str | None,
     actions: list[dict[str, Any]] | None,
     signals: dict[str, Any] | None,
+    actual_handoff: bool = False,
 ) -> dict[str, Any] | None:
-    """回答就绪、落库成功后的最终进度；只发一条。"""
+    """回答就绪、落库成功后的最终进度；只发一条。
+
+    `actual_handoff` 区分“已经转接”与“只是给了一个转人工按钮”：
+    - 投诉/文字转人工：route=human，已转接；
+    - 合规分歧 `transfer()`：带 `transfer_reason`，已转接；
+    - 兜底 unknown：只是提供按钮，用户还没点，不能显示“已转接”。
+    """
     actions = actions or []
     signals = signals or {}
 
-    if any(action.get("type") == "transfer_human" for action in actions):
-        # 正在转接人工
+    if actual_handoff or route == "human":
         return _frame("handoff", status="waiting")
 
     pending = signals.get("pending_question")
@@ -162,6 +171,6 @@ def final_frame(
         # 已处理
         return _frame("working")
     if route == "human":
-        # 正在转接人工
+        # 已转接人工，等待接入
         return _frame("handoff", status="waiting")
     return None

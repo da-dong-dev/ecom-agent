@@ -26,6 +26,7 @@ HTTP 这一层还需要一个兜底码：
 """
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -64,6 +65,17 @@ logger = logging.getLogger(__name__)
 
 MAX_MESSAGE_CHARS = 500
 ERROR_ANSWER = "服务暂时不可用，请稍后重试。"
+
+# 用户直接打「转人工」也要走 D 出口；不能只依赖前端结构化动作。
+_TRANSFER_PHRASES = (
+    "转人工", "转接人工", "找人工", "要人工", "人工客服", "人工服务",
+    "转客服", "找客服", "要客服",
+)
+
+
+def _is_transfer_request(text: str) -> bool:
+    compact = re.sub(r"[\s，,。.!！?？]", "", text or "")
+    return compact == "人工" or any(phrase in compact for phrase in _TRANSFER_PHRASES)
 
 
 class ChatError(Exception):
@@ -174,6 +186,31 @@ def _parse_assistant_meta(raw: str | None) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _citation_details(final: dict[str, Any]) -> list[dict[str, str]]:
+    """把 citation_ids 映射回当时的证据，供前端点开看来源。
+
+    只保留展示所需字段，不把相似度/内部信号带出去。
+    """
+    evidence = final.get("evidence") or []
+    by_id = {
+        str(item.get("id")): item
+        for item in evidence
+        if isinstance(item, dict) and item.get("id") is not None
+    }
+    details: list[dict[str, str]] = []
+    for cid in final.get("citation_ids") or []:
+        item = by_id.get(str(cid)) or {}
+        details.append(
+            {
+                "id": str(cid),
+                "section_path": str(item.get("section") or ""),
+                "text": str(item.get("text") or "")[:600],
+                "source": str(item.get("source") or ""),
+            }
+        )
+    return details
+
+
 async def _replay_frames(
     *,
     cid: int,
@@ -206,6 +243,7 @@ async def _replay_frames(
         route=route,
         actions=actions,
         signals=signals,
+        actual_handoff=bool(signals.get("handoff")),
     )
     if replay_progress is not None:
         yield replay_progress
@@ -214,8 +252,14 @@ async def _replay_frames(
         yield {"delta": reply.content}
 
     citations = meta.get("citation_ids") or []
+    raw_details = meta.get("citations")
+    citation_details = raw_details if isinstance(raw_details, list) else []
     if citations:
-        yield {"event": "citations", "items": citations}
+        yield {
+            "event": "citations",
+            "items": citations,
+            "details": citation_details,
+        }
 
     if actions:
         yield {"event": "actions", "items": actions}
@@ -294,10 +338,14 @@ async def _finalize_answer(
         and refund_amount > 0
         and final.get("compliance_violation") is None
     )
+    # route=human 是明确转接；rules 的 transfer() 带 transfer_reason；
+    # fallback 里的 transfer_human 只是“提供按钮”，不算已经转接。
+    actual_handoff = route == "human" or bool(final.get("transfer_reason"))
     assistant_meta = {
         "intent": final.get("intent"),
         "route": route,
         "citation_ids": citations,
+        "citations": _citation_details(final),
         "resumed": bool(final.get("resumed")),
         "actions": actions,
         "signals": {
@@ -306,6 +354,7 @@ async def _finalize_answer(
             "refund_eligible": (
                 bool(judgement.get("eligible")) if route == "rules" else None
             ),
+            "handoff": actual_handoff,
         },
     }
 
@@ -369,6 +418,7 @@ async def _finalize_answer(
         route=route,
         actions=actions,
         signals=assistant_meta["signals"],
+        actual_handoff=actual_handoff,
     )
     if final_progress is not None and final_progress != last_progress:
         yield final_progress
@@ -377,7 +427,11 @@ async def _finalize_answer(
         yield {"delta": answer}
 
     if citations:
-        yield {"event": "citations", "items": citations}
+        yield {
+            "event": "citations",
+            "items": citations,
+            "details": assistant_meta["citations"],
+        }
 
     if actions:
         yield {"event": "actions", "items": actions}
@@ -528,14 +582,14 @@ async def _run_turn_locked(
                 client_message_id,
             )
 
-    # Ch08：前端点「转人工」= 结构化动作，不跑分类/图，也不建工单。
-    # 复用 D 出口的固定话术；decide_flow 会清空当前流程。
-    if (selected_action or {}).get("type") == "transfer_human":
+    # Ch08：前端点「转人工」= 结构化动作；用户直接打“转人工”也走同一短路。
+    # 不跑分类/图，也不建工单；复用 D 出口固定话术，decide_flow 清空当前流程。
+    if (selected_action or {}).get("type") == "transfer_human" or _is_transfer_request(text):
         user_message_id = await save_user_message(
             cid,
             text or None,
             client_message_id=client_message_id,
-            meta={"selected_action": selected_action},
+            meta={"selected_action": selected_action} if selected_action else None,
             session=session,
         )
         yield {

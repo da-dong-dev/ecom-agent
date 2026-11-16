@@ -30,6 +30,7 @@ class RefundDraft(TypedDict, total=False):
     """C 出口的要素（对应 `ConversationState.refund_draft`）。"""
 
     reason_code: str          # quality / no_reason / other
+    reason_text: str          # reason_code=other 时用户补充的说明
     item_count: int
     condition_ok: bool | None # 三态：True / False / None（用户没说）
     packaging_opened: bool

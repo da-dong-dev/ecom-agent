@@ -35,6 +35,22 @@ async def get_conversation(
         return row
 
 
+async def soft_delete_conversation(
+    cid: int, *, user_id: str, session: AsyncSession | None = None
+) -> None:
+    """软删会话：只改 deleted_at，保留消息用于审计/回放。
+
+    不存在、不属于本人、已软删 —— 一律 NotFound（S2）。
+    """
+    async with session_scope(session) as s:
+        row = await s.get(Conversation, cid)
+        if row is None or row.user_id != user_id or row.deleted_at is not None:
+            raise NotFound("conversation not found")
+        now = utcnow()
+        row.deleted_at = now
+        row.updated_at = now
+
+
 async def set_flow(
     cid: int,
     *,

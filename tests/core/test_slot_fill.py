@@ -137,3 +137,37 @@ async def test_resume_without_pending_question_is_not_a_signal():
     result = await slot_fill.fill(None, "继续退费")
     assert result.resume is False
     assert result.filled is False
+
+
+async def test_select_reason_quality_fills_draft():
+    result = await slot_fill.fill(
+        "reason_code",
+        "",
+        selected={"type": "select_reason", "reason_code": "quality"},
+    )
+    assert result.filled is True
+    assert result.value == {"reason_code": "quality"}
+
+
+async def test_select_reason_other_requires_text():
+    result = await slot_fill.fill(
+        "reason_code",
+        "尺码不合适",
+        selected={
+            "type": "select_reason",
+            "reason_code": "other",
+            "reason_text": "尺码不合适",
+        },
+    )
+    assert result.filled is True
+    assert result.value == {
+        "reason_code": "other",
+        "reason_text": "尺码不合适",
+    }
+
+    empty = await slot_fill.fill(
+        "reason_code",
+        "",
+        selected={"type": "select_reason", "reason_code": "other"},
+    )
+    assert empty.filled is False

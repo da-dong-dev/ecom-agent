@@ -106,6 +106,14 @@ STRONG_CHUNKS = [
         "knowledge": {
             "answer": "质量问题由商家承担[1]。",
             "citation_ids": ["returns#退货运费由谁承担"],
+            "evidence": [
+                {
+                    "id": "returns#退货运费由谁承担",
+                    "text": "质量问题由商家承担运费。",
+                    "source": "returns.md",
+                    "section": "退货运费由谁承担",
+                }
+            ],
             "is_placeholder": False,
         }
     },
@@ -170,6 +178,34 @@ async def test_actions_frame_only_when_present(frames):
     # 没有动作时不该发空帧
     out_without = await frames(STRONG_CHUNKS)
     assert not any(f.get("event") == "actions" for f in out_without)
+
+
+async def test_fallback_transfer_action_is_not_actual_handoff(frames):
+    """兜底只是给出转人工按钮，用户没点，进度不能显示“已转接”。"""
+    chunks = [
+        {"resolve_reference": {"resolved_query": "******"}},
+        {"classify_intent": {"intent": "闲聊", "route": "fallback"}},
+        {
+            "fallback": {
+                "answer": "抱歉，这个问题我暂时没能理解。",
+                "actions": [{"type": "transfer_human"}],
+                "is_placeholder": False,
+            }
+        },
+    ]
+    out = await frames(chunks, message="******")
+    progress = [f["stage"] for f in out if f.get("event") == "progress"]
+    assert progress == ["working"]
+    assert any(f.get("event") == "actions" for f in out)
+
+
+async def test_citations_frame_carries_source_details(frames):
+    out = await frames(STRONG_CHUNKS)
+    citations = next(f for f in out if f.get("event") == "citations")
+    assert citations["items"] == ["returns#退货运费由谁承担"]
+    assert citations["details"][0]["section_path"] == "退货运费由谁承担"
+    assert citations["details"][0]["text"] == "质量问题由商家承担运费。"
+    assert citations["details"][0]["source"] == "returns.md"
 
 
 async def test_no_citations_frame_when_empty(frames):
@@ -472,6 +508,7 @@ async def test_assistant_meta_persists_actions_and_signals(session, spans):
         "amount": 124900,
         "pending_question": None,
         "refund_eligible": True,
+        "handoff": False,
     }
 
     # 助手回复要能按 client_message_id 精确找回
@@ -628,6 +665,35 @@ async def test_transfer_action_shortcuts_graph(session, spans):
     conv = await get_conversation(cid, user_id="u1", session=session)
     assert conv.active_flow is None
     assert conv.pending_question is None
+    assert (await session.execute(select(Ticket))).scalars().all() == []
+
+
+@pytest.mark.parametrize("text", ["转人工", "我要找人工客服", "人工"])
+async def test_typed_transfer_shortcuts_graph(session, spans, text: str):
+    """用户直接打“转人工”也要走 D 出口，不能落到 UNKNOWN_REPLY。"""
+    cid = await create_conversation("u1", session=session)
+    graph = FakeGraph(STRONG_CHUNKS)
+    out = [
+        f
+        async for f in run_turn(
+            text,
+            cid,
+            "t-1",
+            graph=graph,
+            session=session,
+        )
+    ]
+
+    assert graph.calls == 0
+    route = next(f for f in out if f.get("event") == "route")
+    assert route == {
+        "event": "route",
+        "route": "human",
+        "intent": "其他",
+        "resumed": False,
+    }
+    actions = next(f for f in out if f.get("event") == "actions")
+    assert actions["items"] == [{"type": "transfer_human"}]
     assert (await session.execute(select(Ticket))).scalars().all() == []
 
 

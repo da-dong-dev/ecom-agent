@@ -46,4 +46,7 @@ def route_by_intent(state: ConversationState) -> str:
     用 `.get(默认值)` 而不是 `[]`：模型偶尔会返回没见过的意图词，
     这时应保守兜底，而不是让整轮请求抛 `KeyError`。
     """
+    if state.get("multi_intent"):
+        # 多意图先澄清；不能因为主意图是退款就直接进 rules。
+        return FALLBACK_ROUTE
     return INTENT_TO_ROUTE.get(state.get("intent", ""), FALLBACK_ROUTE)

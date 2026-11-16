@@ -18,7 +18,7 @@ def test_stage_labels_cover_every_stage():
         "retrieving": "已检索知识库",
         "evidence_ready": "已找到依据",
         "working": "已处理",
-        "handoff": "正在转接人工",
+        "handoff": "已转接人工，等待接入",
     }
 
 
@@ -30,6 +30,21 @@ def test_rules_nodes_map_to_three_states():
 
     assert node_frame(
         "query_data", {"order_snapshot": {"order_id": "1002"}}, state
+    ) == {
+        "event": "progress",
+        "stage": "checking_order",
+        "status": "done",
+    }
+    # 真实规则图在 validate 查单；query_data 可能复用快照、update 为空。
+    assert node_frame(
+        "validate", {"order_snapshot": {"order_id": "1002"}}, state
+    ) == {
+        "event": "progress",
+        "stage": "checking_order",
+        "status": "done",
+    }
+    assert node_frame(
+        "query_data", {}, {"order_snapshot": {"order_id": "1002"}}
     ) == {
         "event": "progress",
         "stage": "checking_order",
@@ -128,6 +143,7 @@ def test_final_frame_precedence():
         route="rules",
         actions=[{"type": "transfer_human"}],
         signals=amount_signals,
+        actual_handoff=True,
     ) == {
         "event": "progress",
         "stage": "handoff",
@@ -167,6 +183,16 @@ def test_final_frame_precedence():
         "status": "done",
     }
     assert final_frame(route="fallback", actions=[], signals={}) == {
+        "event": "progress",
+        "stage": "working",
+        "status": "done",
+    }
+    # 兜底只是提供转人工按钮，用户还没点，不能显示“已转接”。
+    assert final_frame(
+        route="fallback",
+        actions=[{"type": "transfer_human"}],
+        signals={},
+    ) == {
         "event": "progress",
         "stage": "working",
         "status": "done",

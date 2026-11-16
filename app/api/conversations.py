@@ -17,14 +17,25 @@ from fastapi import APIRouter, HTTPException
 from app.config import get_settings
 from app.db.errors import NotFound
 from app.db.models import Message
-from app.db.repo_conversation import get_conversation, list_conversation_summaries
+from app.db.repo_conversation import (
+    get_conversation,
+    list_conversation_summaries,
+    soft_delete_conversation,
+)
 from app.db.repo_message import list_messages
 
 router = APIRouter()
 
 _ROLE_WHITELIST = frozenset({"user", "assistant"})
-_ASSISTANT_META_KEYS = ("intent", "route", "citation_ids", "resumed", "actions")
-_SIGNAL_KEYS = ("amount", "pending_question", "refund_eligible")
+_ASSISTANT_META_KEYS = (
+    "intent",
+    "route",
+    "citation_ids",
+    "citations",
+    "resumed",
+    "actions",
+)
+_SIGNAL_KEYS = ("amount", "pending_question", "refund_eligible", "handoff")
 
 
 def _parse_meta(raw: str | None) -> dict[str, Any]:
@@ -102,3 +113,14 @@ async def get_conversation_messages(cid: int) -> dict[str, Any]:
         "pending_question": conv.pending_question,
         "items": items,
     }
+
+
+
+@router.delete("/api/conversations/{cid}", status_code=204)
+async def delete_conversation(cid: int) -> None:
+    """软删当前用户的会话；不存在 / 不属于本人 / 已软删统一 404。"""
+    user_id = get_settings().demo_user_id
+    try:
+        await soft_delete_conversation(cid, user_id=user_id)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail="Not Found") from exc

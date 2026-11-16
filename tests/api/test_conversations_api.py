@@ -185,3 +185,27 @@ def test_messages_serialize_whitelist_and_skip_tool(client, monkeypatch):
     assert error_item["status"] == "error"
     assert error_item["reply_to_client_message_id"] is None
     assert error_item["meta"]["signals"] == {}
+
+
+def test_delete_conversation_soft_deletes_own(client, monkeypatch):
+    calls: list[tuple[int, str]] = []
+
+    async def fake_delete(cid, *, user_id, session=None):
+        calls.append((cid, user_id))
+
+    monkeypatch.setattr(conversations_module, "soft_delete_conversation", fake_delete)
+
+    resp = client.delete("/api/conversations/12")
+    assert resp.status_code == 204
+    assert calls == [(12, "u1")]
+
+
+def test_delete_missing_or_foreign_returns_404(client, monkeypatch):
+    async def fake_delete(cid, *, user_id, session=None):
+        raise NotFound("conversation not found")
+
+    monkeypatch.setattr(conversations_module, "soft_delete_conversation", fake_delete)
+
+    resp = client.delete("/api/conversations/999")
+    assert resp.status_code == 404
+    assert resp.json() == {"detail": "Not Found"}

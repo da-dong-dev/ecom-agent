@@ -157,3 +157,17 @@ async def test_node_falls_back_to_raw_query_when_resolved_empty(monkeypatch):
     result = await classify_intent({"raw_query": "在吗", "resolved_query": ""})
     assert seen == ["在吗"]
     assert result["route"] == "fallback"
+
+
+async def test_multi_intent_node_routes_to_clarify(monkeypatch):
+    """多意图时先走 fallback 澄清，不能直接按主诉求问订单。"""
+
+    async def fake_classify(_query: str):
+        return ("退款申请", 0.9, True)
+
+    monkeypatch.setattr("app.graph.nodes.classify", fake_classify)
+    result = await classify_intent({"resolved_query": "我要退款，另外查物流"})
+
+    assert result["intent"] == "退款申请"
+    assert result["multi_intent"] is True
+    assert result["route"] == FALLBACK_ROUTE
