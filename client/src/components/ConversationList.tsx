@@ -1,4 +1,11 @@
-import { Button, Card, List, Tag, Typography } from "antd";
+import {
+  DeleteOutlined,
+  HistoryOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
+import { Button, Card, List, Popconfirm, Space, Tag, Typography } from "antd";
+
+import { formatConversationTime } from "../lib/time";
 
 import type { ConversationSummary } from "../lib/api";
 
@@ -8,20 +15,10 @@ type Props = {
   loading: boolean;
   onSelect: (id: number) => void;
   onNew: () => void;
+  onDelete?: (id: number) => void;
+  /** 回复中：列表只读，避免切换会话打断当前 SSE。 */
+  disabled?: boolean;
 };
-
-function formatUpdated(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function flowLabel(item: ConversationSummary): string | null {
   if (item.active_flow === "refund") {
@@ -42,15 +39,30 @@ export function ConversationList({
   loading,
   onSelect,
   onNew,
+  onDelete,
+  disabled = false,
 }: Props) {
   return (
     <Card
       size="small"
-      title="历史会话"
+      title={
+        <Space size={8}>
+          <HistoryOutlined />
+          历史会话
+        </Space>
+      }
       variant="borderless"
       className="conversation-card"
       extra={
-        <Button type="link" size="small" onClick={onNew}>
+        <Button
+          type="primary"
+          size="small"
+          icon={<PlusOutlined />}
+          aria-label="新对话"
+          disabled={disabled}
+          onClick={onNew}
+          className="new-conversation-btn"
+        >
           新对话
         </Button>
       }
@@ -64,8 +76,14 @@ export function ConversationList({
           <List.Item
             className={`conversation-item ${
               item.id === activeId ? "active" : ""
-            }`}
-            onClick={() => onSelect(item.id)}
+            } ${disabled ? "disabled" : ""}`}
+            aria-disabled={disabled}
+            title={disabled ? "正在回复中，请稍候" : undefined}
+            onClick={() => {
+              if (!disabled) {
+                onSelect(item.id);
+              }
+            }}
           >
             <div className="conversation-body">
               <span className="conversation-title" data-testid="conversation-title">
@@ -73,13 +91,38 @@ export function ConversationList({
               </span>
               <div className="conversation-meta">
                 <Typography.Text type="secondary" className="conversation-time">
-                  {formatUpdated(item.updated_at)}
+                  {formatConversationTime(item.updated_at)}
                 </Typography.Text>
                 {flowLabel(item) ? (
                   <Tag color="orange">{flowLabel(item)}</Tag>
                 ) : null}
               </div>
             </div>
+
+            {onDelete ? (
+              <span
+                className="conversation-actions"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Popconfirm
+                  title="删除这个会话？"
+                  description="删除后不会出现在历史列表。"
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={() => onDelete(item.id)}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    danger
+                    disabled={disabled}
+                    aria-label="删除会话"
+                    icon={<DeleteOutlined aria-hidden />}
+                  />
+                </Popconfirm>
+              </span>
+            ) : null}
           </List.Item>
         )}
       />

@@ -8,13 +8,22 @@ export type AssistantAction = {
   [key: string]: unknown;
 };
 
+export type CitationDetail = {
+  id: string;
+  section_path?: string;
+  text?: string;
+  source?: string;
+};
+
 export type ChatMessage = {
   id?: number;
   clientMessageId?: string;
   role: Role;
   content: string;
+  createdAt?: string;
   status?: string | null;
   citationIds?: string[];
+  citations?: CitationDetail[];
   actions?: AssistantAction[];
 };
 
@@ -36,6 +45,8 @@ export type TurnState = {
   error: string | null;
   /** 连接中断/用户停止：内容保留，允许用同一个 client_message_id 继续。 */
   interrupted: boolean;
+  /** 本会话已经真正转接人工；后续不再重复展示“转人工”按钮。 */
+  handoffStarted: boolean;
   lastClientMessageId: string | null;
   /** 重试结构化动作时，必须复用同一个 selected_action。 */
   lastSelectedAction: AssistantAction | null;
@@ -80,6 +91,7 @@ export function initialTurnState(): TurnState {
     route: null,
     error: null,
     interrupted: false,
+    handoffStarted: false,
     lastClientMessageId: null,
     lastSelectedAction: null,
   };
@@ -127,7 +139,14 @@ function appendDelta(state: TurnState, delta: string): TurnState {
   if (index < 0) {
     return {
       ...state,
-      messages: [...state.messages, { role: "assistant", content: delta }],
+      messages: [
+        ...state.messages,
+        {
+          role: "assistant",
+          content: delta,
+          createdAt: new Date().toISOString(),
+        },
+      ],
     };
   }
 
@@ -147,13 +166,29 @@ function patchAssistant(
   if (index < 0) {
     return {
       ...state,
-      messages: [...state.messages, { role: "assistant", content: "", ...patch }],
+      messages: [
+        ...state.messages,
+        {
+          role: "assistant",
+          content: "",
+          createdAt: new Date().toISOString(),
+          ...patch,
+        },
+      ],
     };
   }
 
   const messages = [...state.messages];
   messages[index] = { ...messages[index], ...patch };
   return { ...state, messages };
+}
+
+export function isCitationDetail(value: unknown): value is CitationDetail {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { id?: unknown }).id === "string"
+  );
 }
 
 export function isAssistantAction(
@@ -193,11 +228,14 @@ export function applyFrame(state: TurnState, frame: ChatFrame): TurnState {
       return { ...state, conversationId, messages };
     }
 
-    case "route":
+    case "route": {
+      const route = typeof frame.route === "string" ? frame.route : state.route;
       return {
         ...state,
-        route: typeof frame.route === "string" ? frame.route : state.route,
+        route,
+        handoffStarted: state.handoffStarted || route === "human",
       };
+    }
 
     case "progress": {
       const stage = typeof frame.stage === "string" ? frame.stage : null;
@@ -238,14 +276,28 @@ export function applyFrame(state: TurnState, frame: ChatFrame): TurnState {
       const citationIds = Array.isArray(frame.items)
         ? frame.items.filter((item): item is string => typeof item === "string")
         : [];
-      return patchAssistant(state, { citationIds });
+      const citations = Array.isArray(frame.details)
+        ? frame.details.filter(isCitationDetail)
+        : undefined;
+      return patchAssistant(state, {
+        citationIds,
+        ...(citations ? { citations } : {}),
+      });
     }
 
     case "actions": {
       const actions = Array.isArray(frame.items)
         ? frame.items.filter(isAssistantAction)
         : [];
-      return patchAssistant(state, { actions });
+      // fallback 的 transfer_human 只是“提供按钮”，点之前不算已转接；
+      // rules/human 的 transfer_human 才是实际转接。
+      const actualHandoff =
+        actions.some((action) => action.type === "transfer_human") &&
+        state.route !== "fallback";
+      return {
+        ...patchAssistant(state, { actions }),
+        handoffStarted: state.handoffStarted || actualHandoff,
+      };
     }
 
     case "done": {
@@ -293,6 +345,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
             role: "user",
             content: action.text,
             clientMessageId: action.clientMessageId,
+            createdAt: new Date().toISOString(),
           },
         ],
       };

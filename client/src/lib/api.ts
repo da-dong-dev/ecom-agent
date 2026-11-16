@@ -41,3 +41,7 @@ export async function getMessages(cid: number): Promise<ConversationHistory> {
   const response = await request(`/api/conversations/${cid}/messages`);
   return (await response.json()) as ConversationHistory;
 }
+
+export async function deleteConversation(cid: number): Promise<void> {
+  await request(`/api/conversations/${cid}`, { method: "DELETE" });
+}

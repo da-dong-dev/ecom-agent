@@ -1,4 +1,10 @@
-import { Card, Flex, Grid, Steps, Tag, Typography } from "antd";
+import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  LoadingOutlined,
+} from "@ant-design/icons";
+import { Card, Flex, Grid, Space, Steps, Tag, Typography } from "antd";
+import { Fragment } from "react";
 
 import { formatAmount } from "../lib/format";
 import type { Progress } from "../state/turn";
@@ -7,6 +13,8 @@ type Props = {
   route: string | null;
   progress: Progress[];
   inFlight: boolean;
+  /** 嵌在聊天消息下方时使用紧凑横排，不渲染 Card。 */
+  embedded?: boolean;
 };
 
 type StepStatus = "wait" | "process" | "finish" | "error";
@@ -76,7 +84,7 @@ function buildSteps(
     if (byStage.has("handoff")) {
       steps.push({
         key: "handoff",
-        title: "正在转接人工",
+        title: "已转接人工，等待接入",
         status: statusOf(byStage.get("handoff"), "process"),
       });
       return steps;
@@ -138,7 +146,7 @@ function buildSteps(
     if (byStage.has("handoff")) {
       steps.push({
         key: "handoff",
-        title: "正在转接人工",
+        title: "已转接人工，等待接入",
         status: "process",
       });
     }
@@ -170,7 +178,7 @@ function buildSteps(
     if (byStage.has("handoff")) {
       steps.push({
         key: "handoff",
-        title: "正在转接人工",
+        title: "已转接人工，等待接入",
         status: "process",
       });
     }
@@ -188,7 +196,7 @@ function buildSteps(
     if (byStage.has("handoff")) {
       steps.push({
         key: "handoff",
-        title: "正在转接人工",
+        title: "已转接人工，等待接入",
         status: "process",
       });
     }
@@ -199,8 +207,8 @@ function buildSteps(
     return [
       {
         key: "handoff",
-        title: "正在转接人工",
-        status: statusOf(byStage.get("handoff"), "process"),
+        title: "已转接人工",
+        status: "finish",
       },
     ];
   }
@@ -211,13 +219,96 @@ function buildSteps(
   return [];
 }
 
-export function ProgressPanel({ route, progress, inFlight }: Props) {
+export function inlineSteps(
+  route: string | null,
+  progress: Progress[],
+  inFlight: boolean,
+): PanelStep[] {
+  const steps = buildSteps(route, progress, inFlight);
+  if (steps.length === 0) {
+    return [];
+  }
+  const embeddedSteps = steps.filter(
+    (step) => step.key !== "working" && step.key !== "understanding",
+  );
+  if (
+    embeddedSteps.length === 0 ||
+    embeddedSteps.some((step) => step.key === "waiting_info")
+  ) {
+    return [];
+  }
+  return embeddedSteps;
+}
+
+export function hasInlineProgress(
+  route: string | null,
+  progress: Progress[],
+  inFlight: boolean,
+): boolean {
+  return inlineSteps(route, progress, inFlight).length > 0;
+}
+
+export function inlineProgressLabel(
+  route: string | null,
+  progress: Progress[],
+  inFlight: boolean,
+): string | null {
+  const steps = inlineSteps(route, progress, inFlight);
+  if (steps.length === 0) {
+    return null;
+  }
+  return (
+    steps.find((step) => step.status === "process")?.title ??
+    steps[steps.length - 1].title
+  );
+}
+
+export function ProgressPanel({
+  route,
+  progress,
+  inFlight,
+  embedded = false,
+}: Props) {
   const screens = Grid.useBreakpoint();
   const compact = screens.md === false;
   const steps = buildSteps(route, progress, inFlight);
 
   if (steps.length === 0) {
     return null;
+  }
+
+  if (embedded) {
+    // “等待您补充信息”已经由助手问题和选项表达；
+    // “正在理解/正在处理”与打字提示重复。内联进度只展示真正的处理步骤。
+    const embeddedSteps = inlineSteps(route, progress, inFlight);
+    if (embeddedSteps.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="progress-inline">
+        <span className="progress-inline-label">处理进度</span>
+        <div className="progress-inline-steps">
+          {embeddedSteps.map((step, index) => (
+            <Fragment key={step.key}>
+              {index > 0 ? (
+                <span className="progress-inline-sep">→</span>
+              ) : null}
+              <span className={`progress-inline-step ${step.status}`}>
+                {step.status === "finish" ? (
+                  <CheckCircleOutlined />
+                ) : step.status === "process" ? (
+                  <LoadingOutlined />
+                ) : (
+                  <ClockCircleOutlined />
+                )}
+                {step.title}
+              </span>
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const current = steps.findIndex(
@@ -231,7 +322,12 @@ export function ProgressPanel({ route, progress, inFlight }: Props) {
   return (
     <Card
       size="small"
-      title="处理进度"
+      title={
+        <Space size={8}>
+          {inFlight ? <LoadingOutlined /> : <CheckCircleOutlined />}
+          处理进度
+        </Space>
+      }
       variant="borderless"
       className="progress-card"
     >
@@ -251,6 +347,11 @@ export function ProgressPanel({ route, progress, inFlight }: Props) {
           }))}
         />
       )}
+      {route === "human" ? (
+        <Typography.Text type="secondary" className="progress-note">
+          转接请求已提交，等待人工接入期间可以继续描述问题。
+        </Typography.Text>
+      ) : null}
     </Card>
   );
 }

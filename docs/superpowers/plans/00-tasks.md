@@ -115,7 +115,7 @@ D 的建单（P4-3）仍待做。
 | P5-8 | 演示场景 4 验收 | L8 | 手工记录 | 离开再回来完整走通 | ✅ |
 | P5-9 | **E 出口只读 ReAct**：harness（工具注册 / 循环 / 步数封顶 / trace）+ 兜底接入 | 架构取舍讨论 | `app/core/react.py`、`app/graph/fallback_agent.py` | 规则未命中的长尾能调工具作答；写操作不在工具集；超 4 步收敛到脚本 | ✅ |
 | P5-10 | *(可选)* **B2**：B 出口参数失败分支接 ReAct | 同 P5-9 | 复用 `app/core/react.py` | 仅当评测显示「参数抽取失败 / 需澄清」占比 > 20% 时做 | ⏳ |
-| P5-11 | **多意图澄清**：`multi_intent=true` 时反问「您想先处理哪一件？」，`pending_question` 记住选择，下一轮接回 | M4、M6 | `app/graph/state.py`、`app/graph/nodes.py` | 双诉求输入 → 反问 → 下一轮「先查物流」能接回 data 出口 | ⏳ |
+| P5-11 | **多意图澄清**：`multi_intent=true` 时反问「您想先处理哪一件？」，`pending_question` 记住选择，下一轮接回 | M4、M6 | `app/graph/state.py`、`app/graph/nodes.py` | 双诉求输入 → 先反问澄清（最小版，不记 pending） | ⚠️ |
 | P5-12 | **checkpointer + `interrupt`**：图内暂停/恢复，替代 Ch03 的 DB 版追问。**触发条件**：需要"同一轮内原地续跑、不重跑已完成节点"，或人工审核要插在流程中间 | M5 | `app/graph/build.py`、`app/graph/rules_exit.py` | `need_info` 用 `interrupt` 挂起；同一 `thread_id` 恢复后从断点继续（不重跑 `intake`/`extract`）；`SqliteSaver` 落库，进程重启可恢复 | ⏳ |
 | P5-13 | **指代消解**：每轮改写 + 三个短路；失败回落原句 | M3 | `app/core/coref.py` | 「那单呢」能补全；无历史/含实体/resume 轮不调模型 | ✅ |
 | P5-14 | *(后续)* **ReAct 槽位解析**：`slot_fill` 失败时复用只读 ReAct；加 `list_user_orders` / `search_products`；`ReactResult` 回填 `resolved_slot/value` | M6、P5-9 | `app/core/react.py`、`app/core/slot_fill.py`、商品目录 | 「第一单」「那个推车」能接回流程；多命中列候选，不猜 | ⏳ |
@@ -189,7 +189,7 @@ D 的建单（P4-3）仍待做。
 | P8-3 | 进度面板 | L4 | — | 三状态可切换 | ✅ |
 | P8-4 | 转人工入口 | D4 | — | 点击可触发 | ✅ |
 | P8-5 | 断流重连 | C2 | `client/src/state/reconnect.ts`、`App.tsx` | 不重复、不跳变 | ✅ |
-| P8-6 | 四个演示场景验收 | L8 | 录屏 | 全部通过 | ⏳ |
+| P8-6 | 四个演示场景验收 | L8 | `docs/reports/ch08-acceptance.md` | API / 回归通过；截图/录屏待补 | ⚠️ |
 
 ---
 
@@ -197,7 +197,7 @@ D 的建单（P4-3）仍待做。
 
 | # | 任务 | 依据 | 验收 | 状态 |
 |---|---|---|---|---|
-| P9-1 | README 定稿（≤150 行，含局限） | L8 | 五段齐全 | ⏳ |
+| P9-1 | README 定稿（≤150 行，含局限） | L8 | 五段齐全 | ✅ |
 | P9-2 | 三张截图 | L8 | 主界面/进度/评测报告 | ⏳ |
 | P9-3 | 2 分钟视频 | L8 | 四个场景 | ⏳ |
 | P9-4 | 仓库公开前检查 | L8-b | 无密钥、无真实数据 | ⏳ |

@@ -60,7 +60,65 @@ describe("ProgressPanel", () => {
       />,
     );
 
-    expect(screen.getByText("正在转接人工")).toBeTruthy();
+    expect(screen.getByText("已转接人工，等待接入")).toBeTruthy();
+  });
+
+  it("shows a completed handoff with a continue note", () => {
+    render(
+      <ProgressPanel
+        route="human"
+        inFlight={false}
+        progress={[{ stage: "handoff", status: "waiting" }]}
+      />,
+    );
+
+    expect(screen.getByText("已转接人工")).toBeTruthy();
+    expect(
+      screen.getByText("转接请求已提交，等待人工接入期间可以继续描述问题。"),
+    ).toBeTruthy();
+  });
+
+  it("renders compact inline progress without a card", () => {
+    const { container } = render(
+      <ProgressPanel
+        route="knowledge"
+        embedded
+        inFlight={false}
+        progress={[
+          { stage: "retrieving", status: "done" },
+          { stage: "evidence_ready", status: "done" },
+          { stage: "answering", status: "done" },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector(".progress-inline")).toBeTruthy();
+    expect(container.querySelector(".ant-card")).toBeNull();
+    expect(screen.getByText("已检索知识库")).toBeTruthy();
+  });
+
+  it("hides redundant waiting/understanding inline progress", () => {
+    const waiting = render(
+      <ProgressPanel
+        route="rules"
+        embedded
+        inFlight={false}
+        progress={[
+          { stage: "waiting_info", status: "waiting", pendingQuestion: "order_id" },
+        ]}
+      />,
+    );
+    expect(waiting.container.querySelector(".progress-inline")).toBeNull();
+
+    const understanding = render(
+      <ProgressPanel
+        route={null}
+        embedded
+        inFlight
+        progress={[]}
+      />,
+    );
+    expect(understanding.container.querySelector(".progress-inline")).toBeNull();
   });
 
   it("shows knowledge stages", () => {

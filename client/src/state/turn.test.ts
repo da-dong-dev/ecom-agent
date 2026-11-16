@@ -26,14 +26,25 @@ describe("turnReducer", () => {
     const state = begin();
 
     expect(state.inFlight).toBe(true);
-    expect(state.messages).toEqual([
-      {
-        role: "user",
-        content: "订单1002 不想要了",
-        clientMessageId: "cm-1",
-      },
-    ]);
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0]).toMatchObject({
+      role: "user",
+      content: "订单1002 不想要了",
+      clientMessageId: "cm-1",
+      createdAt: expect.any(String),
+    });
     expect(state.lastClientMessageId).toBe("cm-1");
+  });
+
+  it("marks handoffStarted when route is human", () => {
+    let state = begin();
+    state = frame(state, { event: "route", route: "human" });
+    state = frame(state, {
+      event: "actions",
+      items: [{ type: "transfer_human" }],
+    });
+
+    expect(state.handoffStarted).toBe(true);
   });
 
   it("folds ack/route/progress/delta/citations/actions/done", () => {

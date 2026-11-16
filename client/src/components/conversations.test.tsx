@@ -46,6 +46,46 @@ describe("ConversationList", () => {
     expect(onSelect).toHaveBeenCalledWith(2);
   });
 
+  it("disables switching and new conversation while replying", () => {
+    const onSelect = vi.fn();
+    render(
+      <ConversationList
+        items={items}
+        activeId={1}
+        loading={false}
+        disabled
+        onSelect={onSelect}
+        onNew={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("第二个会话"));
+    expect(onSelect).not.toHaveBeenCalled();
+    const newButton = screen.getByRole("button", {
+      name: "新对话",
+    }) as HTMLButtonElement;
+    expect(newButton.disabled).toBe(true);
+  });
+
+  it("asks for confirmation before deleting a conversation", () => {
+    const onDelete = vi.fn();
+    render(
+      <ConversationList
+        items={items}
+        activeId={1}
+        loading={false}
+        onSelect={vi.fn()}
+        onNew={vi.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "删除会话" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: /^删\s*除$/ }));
+
+    expect(onDelete).toHaveBeenCalledWith(1);
+  });
+
   it("emits new conversation", () => {
     const onNew = vi.fn();
     render(

@@ -145,9 +145,11 @@ describe("buildHistoryState", () => {
       ],
     });
 
-    expect(buildHistoryState(history).progress).toEqual([
+    const state = buildHistoryState(history);
+    expect(state.progress).toEqual([
       { stage: "handoff", status: "waiting" },
     ]);
+    expect(state.handoffStarted).toBe(true);
   });
 
   it("does not mix two conversations", () => {

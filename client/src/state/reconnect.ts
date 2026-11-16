@@ -6,8 +6,10 @@ import type {
 import {
   initialTurnState,
   isAssistantAction,
+  isCitationDetail,
   type AssistantAction,
   type ChatMessage,
+  type CitationDetail,
   type Progress,
   type TurnState,
 } from "./turn";
@@ -50,12 +52,17 @@ function toActions(value: unknown): AssistantAction[] {
   return Array.isArray(value) ? value.filter(isAssistantAction) : [];
 }
 
+function toCitations(value: unknown): CitationDetail[] {
+  return Array.isArray(value) ? value.filter(isCitationDetail) : [];
+}
+
 function toUiMessage(message: ApiChatMessage): ChatMessage {
   if (message.role === "user") {
     return {
       id: message.id,
       role: "user",
       content: message.content,
+      createdAt: message.created_at,
       clientMessageId: message.client_message_id ?? undefined,
     };
   }
@@ -65,8 +72,10 @@ function toUiMessage(message: ApiChatMessage): ChatMessage {
     id: message.id,
     role: "assistant",
     content: message.content,
+    createdAt: message.created_at,
     status: message.status ?? undefined,
     citationIds: toStringArray(meta.citation_ids),
+    citations: toCitations(meta.citations),
     actions: toActions(meta.actions),
   };
 }
@@ -76,11 +85,18 @@ function progressFromAssistant(
   meta: Record<string, unknown>,
 ): Progress[] {
   const actions = toActions(meta.actions);
-  if (actions.some((action) => action.type === "transfer_human")) {
+  const signals = asRecord(meta.signals);
+  const actualHandoff =
+    signals.handoff === true ||
+    route === "human" ||
+    // 旧历史没有 signals.handoff：rules + transfer 动作视为已实际转接；
+    // fallback 的 transfer 只是按钮，不算。
+    (route === "rules" &&
+      actions.some((action) => action.type === "transfer_human"));
+  if (actualHandoff) {
     return [{ stage: "handoff", status: "waiting" }];
   }
 
-  const signals = asRecord(meta.signals);
   const pending =
     typeof signals.pending_question === "string"
       ? signals.pending_question
@@ -185,6 +201,25 @@ export function buildHistoryState(history: ConversationHistory): TurnState {
   const userMeta = asRecord(lastUser?.meta);
   const selected = userMeta.selected_action;
   const selectedAction = isAssistantAction(selected) ? selected : null;
+  const handoffStarted = history.items.some((message) => {
+    if (message.role !== "assistant") {
+      return false;
+    }
+    const meta = asRecord(message.meta);
+    const signals = asRecord(meta.signals);
+    if (signals.handoff === true) {
+      return true;
+    }
+    if (meta.route === "human") {
+      return true;
+    }
+    // 旧历史没有 signals.handoff：rules + transfer 动作视为已实际转接；
+    // fallback 的 transfer 只是按钮，不算。
+    return (
+      meta.route === "rules" &&
+      toActions(meta.actions).some((action) => action.type === "transfer_human")
+    );
+  });
 
   return {
     ...initialTurnState(),
@@ -192,6 +227,7 @@ export function buildHistoryState(history: ConversationHistory): TurnState {
     messages,
     route,
     progress: progressFromAssistant(route, assistantMeta),
+    handoffStarted,
     lastClientMessageId: lastUser?.client_message_id ?? null,
     lastSelectedAction: selectedAction,
   };

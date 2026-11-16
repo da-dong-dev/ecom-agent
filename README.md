@@ -2,39 +2,82 @@
 
 面向消费者的售后客服（C 端），核心是把退费核算从人工翻合同变成可核对、可追溯的自动计算。
 
-> 设计阶段已完成，代码实现中。设计文档见 [docs/design/](docs/design/)。
+> Ch01–Ch08 已在本地跑通；Ch09 数据飞轮是可选计划，见
+> [ch09-flywheel-design.md](docs/superpowers/specs/ch09-flywheel-design.md)。
+> 设计文档见 [docs/design/](docs/design/)。
 
 ## 快速开始
 
+### 1. 准备环境
+
+- Python 3.12 + [uv](https://docs.astral.sh/uv/)
+- Node 20+
+- Chroma（Docker，8000）
+- Ollama + `bge-m3`（11434）
+
+端口与环境变量见 [local-env.md](docs/reports/local-env.md)。
+
 ```bash
+cp .env.example .env          # 填 CHAT_* / EMBED_* 配置
 uv sync
-uv run python scripts/init_db.py     # 建 10 张表（幂等，并校验 schema.sql 与 ORM 一致）
-uv run python scripts/seed.py        # 灌合成数据：6 SKU / 20 订单 / 5 券
-uv run pytest -q                     # 30 条测试
-uv run uvicorn app.main:app --reload --port 8090   # :8090（8000 被本地 Chroma 占用）
 ```
 
-本章不需要任何模型密钥（Ch01 零 LLM 调用）。
+### 2. 建库与迁移
+
+```bash
+uv run python scripts/init_db.py
+uv run python scripts/seed.py
+
+# 老库补齐 Ch08 的 reply_to_client_message_id + 唯一部分索引
+uv run python scripts/migrate_ch08.py --db data/app.db
+uv run python scripts/migrate_ch08.py --db data/eval.db
+```
+
+### 3. 启动后端
+
+```bash
+uv run uvicorn app.main:app --reload --port 8090
+```
+
+健康检查：`curl http://127.0.0.1:8090/api/health`
+
+### 4. 启动前端
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+打开 <http://127.0.0.1:5190>。Vite 已把 `/api` 代理到 `127.0.0.1:8090`。
+
+## 验证
+
+```bash
+uv run pytest -q          # 后端：1084 passed, 10 skipped
+uv run ruff check .       # 通过
+
+cd client
+npm run typecheck         # 通过
+npm test                  # 11 files, 75 tests passed
+npm run build             # 通过
+```
+
+四场景与断流验收见 [ch08-acceptance.md](docs/reports/ch08-acceptance.md)。
 
 ## 进度
 
 | 章节 | 内容 | 状态 |
 |---|---|---|
 | Ch01 | 数据地基：10 表 / seed / 越权校验 | ✅ |
-| Ch02 | 主流程骨架：主图 + 意图 + 知识出口（其余占位） | ✅ |
-| Ch03 | C 出口：8 状态流水线（金额计算） | ⏳ |
-| Ch04 | B 出口：订单 / 物流 / 库存查询 | ⏳ |
-| Ch05 | 多轮：窗口 / 摘要 / park | ⏳ |
-| Ch06 | 安全：注入防御 / 输出检查 | ⏳ |
-| Ch07 | 评测：EvalFlow 接入 | ⏳ |
-| Ch08 | 前端：聊天 + SSE | ⏳ |
-
-整体流程图见 [docs/diagrams/flow-overview.png](docs/diagrams/flow-overview.png)。
-逐任务的改动记录见 [docs/reports/00-change-log-overview.md](docs/reports/00-change-log-overview.md)（按章一份，如 `ch01-data-foundation-changes.md`）。
-想知道每个 Task 做完后**自己能跑什么**，见 [docs/reports/manual-checks.md](docs/reports/manual-checks.md)。
-手动试跑：`uv run python scripts/try.py intent "我买的推车能退吗"`。
-评测指标（hit@3 / MRR / 置信区间 / 分桶）怎么看，见 [docs/reports/metrics-glossary.md](docs/reports/metrics-glossary.md)。
-简历措辞与实现状态的对照见 [docs/reports/resume-positioning.md](docs/reports/resume-positioning.md)。
+| Ch02 | 主流程骨架：主图 + 意图 + 知识出口 | ✅ |
+| Ch03 | C 出口：退款状态机与金额计算 | ✅ |
+| Ch04 | B 出口：订单 / 物流 / 库存查询 | ✅ |
+| Ch05 | 多轮：窗口 / 摘要 / park / ReAct | ✅ |
+| Ch06 | 安全：注入防御 / 输出检查 | ✅ |
+| Ch07 | 评测：44 条评测集 / 阈值 / 退款困难组 | ✅ |
+| Ch08 | 前端：聊天 + 进度 + 动作 + 历史 + 断流 | ✅（截图/录屏待补） |
+| Ch09 | 数据飞轮（可选） | 📋 计划 |
 
 ## 架构
 
@@ -47,18 +90,34 @@ uv run uvicorn app.main:app --reload --port 8090   # :8090（8000 被本地 Chro
   └─ E 兜底
 ```
 
+前端：React + Vite + TypeScript + antd；SSE 帧 reducer；断流采用 C2-lite
+（历史对账 + 同一 `client_message_id` 回放/重试）。
+
 ## 设计取舍
 
-- **金额由代码算，模型只复述** —— 合同规则有 6 种组合，模型算不出可复现的结果
-- **追问用独立状态而非 interrupt** —— 需要可单测、图上看得到
-- **守卫失败按不通过处理（fail-closed）** —— 判断不了 ≠ 通过
-- **数据类问题不进向量检索** —— 能查库的不检索
+- **金额由代码算，模型只复述**：合同规则有 6 种组合，模型算不出可复现结果。
+- **追问用独立状态而非 interrupt**：可单测、图上可见。
+- **守卫失败按不通过处理（fail-closed）**：判断不了 ≠ 通过。
+- **数据类问题不进向量检索**：能查库的不检索。
+- **先落库再展示**：用户看到的回答一定已保存；保存失败就不展示。
 
 ## 局限
 
-- 无真实用户，数据为合成
-- 未接支付与真实物流，退款为模拟
-- 评测集规模有限
+- 无真实用户，数据为合成；未接支付与真实物流，退款为模拟。
+- 没有工单闭环、真实坐席队列、登录鉴权。
+- 评测集规模有限；held-out 不是严格盲测。
+- Ch09 飞轮是离线模拟，不是线上自动飞轮。
+
+## 文档入口
+
+| 想了解 | 先看 |
+|---|---|
+| 整体复习 / 面试 | [project-review.md](docs/reports/project-review.md) |
+| Ch08 验收 | [ch08-acceptance.md](docs/reports/ch08-acceptance.md) |
+| 逐任务改了什么 | [00-change-log-overview.md](docs/reports/00-change-log-overview.md) |
+| 待做与已知边界 | [todo.md](docs/reports/todo.md) |
+| 本地环境 | [local-env.md](docs/reports/local-env.md) |
+| 简历措辞 | [resume-positioning.md](docs/reports/resume-positioning.md) |
 
 ## License
 

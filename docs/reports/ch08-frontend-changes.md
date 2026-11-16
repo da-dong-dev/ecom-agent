@@ -781,3 +781,1259 @@ npm run build       # 通过；dist JS 808.27 kB（gzip 254.74 kB）
 - 纯重构，行为不变；Task 11 的断流/重试逻辑原样搬到 hook。
 - 没有引入状态管理库；`useReducer + hooks` 足够当前规模。
 - App 现在只负责布局；后续加页面时不需要再改聊天执行逻辑。
+
+---
+
+## 12 · 四场景验收与交付文档（2026-11-16）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `docs/reports/ch08-acceptance.md` | 四场景 SSE 记录、重放/历史核对、回归结果、已知边界 |
+| `README.md` | 重写快速开始：建库、迁移、后端 8090、前端 5190、回归命令 |
+| `tests/core/test_progress.py` | 补 `validate` / `query_data` 的 `checking_order` 映射 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/core/progress.py › node_frame` | 只在 `query_data` 的 update 有 `order_snapshot` 时发 `checking_order` | `validate` / `query_data` 都看“本节点 update + 已累积 state” | 真实规则图在 `validate` 查订单，live 输出漏了“核对中” |
+| `docs/reports/todo.md` | P0 仍写“当前阻塞” | P0 标为已关闭；P3 #2/#7 关闭；保留 P3 #8 | 验收后状态要能一眼看出 |
+| `docs/reports/00-change-log-overview.md` | Ch08 🚧 Task 11 | Ch08 ✅（截图/录屏待补） | 章节状态与验收一致 |
+| `docs/reports/README.md` | 下一步 Ch08 | Ch08 Task 12 验收完成；截图/录屏待补 | 索引页不能停留在旧状态 |
+| `docs/superpowers/plans/ch08-frontend.md` | 场景 2/4 样例与实际路由不符 | 场景 2 改用投诉样本；场景 4 补齐缺失槽位 | 验收样例必须能真实复现 |
+
+### 验证
+
+```bash
+uv run pytest -q
+# 1073 passed, 10 skipped
+
+uv run ruff check .
+# All checks passed!
+
+cd client
+npm run typecheck   # 通过
+npm test            # 8 files, 54 tests passed
+npm run build       # 通过；dist JS 808.27 kB（gzip 254.74 kB）
+```
+
+### 四场景结果
+
+1. `订单1002 不想要了` → `rules`；`checking_order` → `amount_ready(124900)` →
+   `waiting_confirm`；金额只出现一次。
+2. `我要投诉你们的客服` → `human`；`handoff`；`actions=[transfer_human]`；不建工单。
+3. `退货政策是什么` → `knowledge`；`retrieving` → `evidence_ready` → `answering`；
+   引用含 `faq#退货政策是什么`。
+4. `我要退款` → `退货政策是什么` → `继续退费` → `1002` → `不想要了`：
+   park 提示 + `resume_flow`；恢复后补齐缺失槽位，最终完成退款。
+
+### 断流结果
+
+- 同一 `client_message_id` 重放：conv 23 仍是 1 条 user + 1 条 assistant；
+- 回放 `delta` 与首次一致；
+- 历史接口返回 `reply_to_client_message_id`、`meta.actions`、`meta.signals.amount`；
+- 浏览器 DevTools Offline 演练与截图/录屏待人工补做。
+
+### 边界
+
+- `ack` 丢失时继续会新建会话（P3 #8 保留）。
+- 没有 token 级流式、没有工单闭环、没有真实坐席队列。
+- 构建体积仍超过 500 kB，P9 交付前再评估。
+
+---
+
+## 12.1 · 视觉与布局调整（2026-11-16）
+
+### 修改与原因
+
+| 文件 | 旧布局 | 新布局 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `client/src/App.tsx` | 三栏 + 输入框横跨整页 | 左会话栏 / 中聊天+输入 / 右进度动作；品牌头部 + 在线状态 | 输入框和聊天区不对齐，页面重心散 |
+| `client/src/styles.css` | 纯灰底、细边框卡片、间距偏紧 | 渐变背景、玻璃感卡片、圆角/阴影、欢迎页、响应式断点 | 视觉太素，缺少层次 |
+| `client/src/components/ChatWindow.tsx` | 只有消息列表 | 聊天头部 + 欢迎页 + 三个快捷问题 | 空会话没有引导，顶部没有“正在和谁聊” |
+| `client/src/components/Composer.tsx` | 普通 TextArea + 按钮 | 圆角输入卡、底部提示、发送/停止图标按钮 | 输入区像表单，不像聊天 |
+| `client/src/components/ConversationList.tsx` | 纯文字列表 | 图标标题 + 胶囊“新对话” + 选中态强调 | 左侧层级弱，当前会话不明显 |
+| `ProgressPanel` / `ActionBar` | 只有标题 | 标题加图标/状态 | 侧栏卡片辨识度低 |
+| `ProgressPanel` 标题图标 | 无条件 `LoadingOutlined` | `inFlight` 时转圈，空闲时 `CheckCircleOutlined` | antd 的 loading 图标默认自带旋转，空闲时也会一直转 |
+| `App.tsx` 顶部状态 | 展示内部路由「知识问答」+ 静态「在线」 | 移除；C 端不暴露 A/B/C/D/E 出口 | 路由是内部实现细节，不是用户价值；「在线」也没有真实 presence |
+| `ChatWindow` 副标题 | 「在线 · 通常几秒内回复」 | 「智能客服 · 通常几秒内回复」 | 避免暗示真人坐席在线 |
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 8 files, 54 tests passed
+npm run build       # 通过；dist JS 813.49 kB（gzip 256.93 kB），CSS 12.17 kB
+```
+
+### 边界
+
+- 纯视觉/布局调整，不改聊天、断流、动作逻辑。
+- 空会话快捷问题复用 `handleSend`，仍走同一套 SSE/幂等逻辑。
+- 构建体积仍超过 500 kB；P9 交付前再评估 code split。
+
+---
+
+## 12.2 · 身份问答修正（2026-11-16）
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/graph/nodes.py › fallback_exit` | `你是谁` 不在 `_SOCIAL_WORDS`，也不含业务词 → `UNKNOWN_REPLY` + `transfer_human` | 新增 `_SELF_INTRO_WORDS` 与 `SELF_INTRO_REPLY`，回答身份/能力，不再推转人工 | C 端问“你是谁”是基础问题，答“没理解”并推人工是产品错误 |
+| `tests/graph/test_human_fallback.py` | 只覆盖寒暄/致谢/未知 | 补 6 条身份/能力用例 | 防止以后关键词调整把身份问题又打回兜底 |
+
+### 验证
+
+```bash
+uv run pytest tests/graph/test_human_fallback.py -q
+# 27 passed
+
+uv run ruff check app/graph/nodes.py tests/graph/test_human_fallback.py
+# All checks passed!
+```
+
+实际 SSE：
+
+```text
+route: fallback / 闲聊
+progress: working done
+delta: 我是电商售后智能客服，可以帮您查订单、算退款，也能解释退货、物流和优惠券规则……
+done
+```
+
+### 边界
+
+- 仍是关键词脚本，不调模型；`你们老板是谁` 这类问题不会被误判成身份介绍。
+- 身份回答不带 `transfer_human`，用户不会被无必要地推向人工。
+
+---
+
+## 12.3 · 聊天自动滚动（2026-11-16）
+
+### 修改与原因
+
+| 文件 | 旧行为 | 新行为 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `client/src/components/ChatWindow.tsx` | 消息列表固定在顶部，新回复在视口外 | 监听 `messages/inFlight`，自动滚到最新；用户上滑阅读时不强拉 | 回复较长时用户必须手动滑到底，容易以为“没回复” |
+| `client/src/styles.css` | 无平滑滚动 | `scroll-behavior: smooth` | 大段回答直接跳到底太生硬 |
+
+### 规则
+
+- 用户刚发出消息：强制回到底部；
+- 用户停留在底部附近（<80px）：新 `delta` / `done` / 加载提示出现时自动跟随；
+- 用户主动上滑阅读历史：不强行打断，避免“看一半被拽走”。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 8 files, 54 tests passed
+npm run build       # 通过；dist JS 814.08 kB（gzip 257.12 kB）
+```
+
+---
+
+## 12.4 · 文字「转人工」短路（2026-11-16）
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/api/chat.py › run_turn` | 只有 `selected_action.type=transfer_human` 才走 D 出口 | 增加 `_is_transfer_request(text)`：用户直接打「转人工 / 找人工 / 人工客服」也走同一短路 | 用户在输入框里打「转人工」会被当普通文本分类，落到 `UNKNOWN_REPLY` |
+| `tests/api/test_chat_sse.py` | 只测结构化转人工 | 补 3 条文字转人工：不跑图、route=human、无工单 | 防止以后改关键词把文字入口打回兜底 |
+
+### 验证
+
+```bash
+uv run pytest tests/api/test_chat_sse.py -q
+# 44 passed
+
+uv run pytest -q
+# 1073 passed, 10 skipped
+
+uv run ruff check .
+# All checks passed!
+```
+
+实际 SSE：
+
+```text
+route: human / 其他
+progress: handoff waiting
+delta: 已为您转接人工客服，请稍候……
+actions: [{"type":"transfer_human"}]
+done
+```
+
+### 规则
+
+- 命中「转人工 / 转接人工 / 找人工 / 要人工 / 人工客服 / 人工服务 / 转客服 / 找客服 / 要客服」；
+- 单独输入「人工」也命中；
+- 「你们老板是谁」不会命中，仍走未知兜底。
+
+---
+
+## 12.5 · 转人工按钮去重（2026-11-16）
+
+### 修改与原因
+
+| 文件 | 旧行为 | 新行为 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `client/src/state/visibleActions.ts` | 只在最后一条用户消息是「转人工」时隐藏按钮 | `route=human` 时也隐藏 | 投诉/兜底回复本身已经执行了转人工，再给按钮会重复转接 |
+| `client/src/hooks/useChatSession.ts` | 组件内联过滤 | 调纯函数 `visibleActionsFor` | 规则可单测，避免回归 |
+| `client/src/state/visibleActions.test.ts` | 无 | 3 条：转人工前显示、已转人工隐藏、用户已输入隐藏 | 防止“转人工按钮反复出现” |
+
+### 场景
+
+1. 输入「我要投诉」→ `route=human`，回复“已为您转接人工客服”→ **右侧不再出现转人工按钮**；
+2. 未知问题 → `route=fallback`，仍显示转人工按钮；
+3. 点按钮 → `route=human`，按钮消失；
+4. 用户自己发「转人工」→ 按钮也不重复出现。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 9 files, 57 tests passed
+npm run build       # 通过；dist JS 814.13 kB（gzip 257.13 kB）
+```
+
+---
+
+## 12.6 · 转人工进度文案（2026-11-16）
+
+### 修改与原因
+
+| 文件 | 旧文案 | 新文案 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `client/src/components/ProgressPanel.tsx` | 「正在转接人工」 | 「已转接人工，等待接入」 | 回复已经说“已为您转接”，进度还写“正在转接”，状态前后矛盾 |
+| `app/core/progress.py › STAGE_LABELS` | 「正在转接人工」 | 「已转接人工，等待接入」 | 文档/文案参考与前端保持一致 |
+| `client/src/components/progress.test.tsx`、`tests/core/test_progress.py` | 旧文案 | 新文案 | 防止回退 |
+
+### 语义
+
+- `stage=handoff`、`status=waiting` 没变；
+- 变的是用户看到的文案：**转接动作已完成，当前在等人工接入**。
+
+### 验证
+
+```bash
+uv run pytest tests/core/test_progress.py -q   # 7 passed
+uv run pytest -q                               # 1073 passed, 10 skipped
+uv run ruff check .                            # 通过
+
+cd client
+npm run typecheck                              # 通过
+npm test                                       # 9 files, 57 tests passed
+npm run build                                  # 通过
+```
+
+---
+
+## 12.7 · 转人工终态提示（2026-11-16）
+
+### 问题
+
+`route=human` 之后，进度卡一直显示「已转接人工，等待接入」，看起来像还在转圈；
+但 Ch08 没有真实坐席队列，也没有超时状态，这个提示会一直停留到用户发下一条消息或新开对话。
+
+### 修改
+
+| 文件 | 旧行为 | 新行为 | 原因 |
+|---|---|---|---|
+| `ProgressPanel.tsx` | `route=human` 用 `process` 状态 | 改成 `finish`，标题「已转接人工」 | 转接动作已完成，不是仍在执行 |
+| `ProgressPanel.tsx` | 无说明 | 增加「转接请求已提交，等待人工接入期间可以继续描述问题」 | 明确不是卡死，用户仍可继续输入 |
+| `progress.test.tsx` | 无 human 终态用例 | 补 1 条 | 防止回退成一直转圈 |
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 9 files, 58 tests passed
+npm run build       # 通过；dist JS 814.24 kB（gzip 257.23 kB）
+```
+
+---
+
+## 12.8 · 区分“已转接”和“转人工按钮”（2026-11-16）
+
+### 问题
+
+用户先在上一轮转人工，随后输入 `******`：
+
+- 回复走 fallback：「没理解…点转人工」；
+- 右侧又出现「转人工」；
+- 进度却显示「已转接人工，等待接入」。
+
+原因是后端 `final_frame` 看到 `actions` 里有 `transfer_human` 就当“已转接”，
+但 fallback 里的动作只是**提供一个按钮**，用户还没点。
+
+### 修改
+
+| 文件 | 旧逻辑 | 新逻辑 |
+|---|---|---|
+| `app/core/progress.py › final_frame` | 有 transfer 动作 = handoff | 新增 `actual_handoff`；只有 route=human 或真实 transfer_reason 才算 |
+| `app/api/chat.py` | 不区分 | `actual_handoff = route == "human" or bool(final.transfer_reason)`；写进 `signals.handoff` |
+| `app/api/conversations.py` | 不返回 handoff 信号 | 白名单增加 `handoff` |
+| `client/src/state/turn.ts` | 无全局转接标记 | `handoffStarted`：route=human / rules transfer 后置 true |
+| `client/src/state/reconnect.ts` | 只看最后一条 | 从整段历史推断 handoffStarted；fallback 的按钮不算 |
+| `client/src/state/visibleActions.ts` | 只看当前 route | `handoffStarted=true` 时隐藏后续转人工按钮 |
+
+### 效果
+
+- `******`：回复仍是“没理解 + 可点转人工”，这是对的；
+- 如果之前已经转人工：右侧不再重复出现按钮；
+- 进度只显示「已处理」，不会假装“已转接”；
+- 真正投诉/文字转人工：progress=handoff，handoffStarted=true。
+
+### 验证
+
+```bash
+uv run pytest -q          # 1074 passed, 10 skipped
+uv run ruff check .       # 通过
+cd client
+npm run typecheck         # 通过
+npm test                  # 9 files, 60 tests passed
+npm run build             # 通过
+```
+
+---
+
+## 12.9 · 时间显示修正 + 聊天气泡时间（2026-11-16）
+
+### 问题
+
+后端时间按 UTC 存储，但 JSON 返回的是无时区后缀的 naive 字符串：
+
+```text
+2026-11-16T13:06:33
+```
+
+浏览器 `new Date(...)` 会把它当本地时间，东八区直接少 8 小时。
+所以左侧会话列表显示 `13:06`，实际本地时间是 `21:06`。
+
+### 修改
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/lib/time.ts` | `parseServerTime`：无时区时补 `Z`；`formatConversationTime` / `formatMessageTime` |
+| `ConversationList.tsx` | 用 `formatConversationTime`；当天显示「今天 HH:mm」，昨天显示「昨天 HH:mm」 |
+| `MessageBubble.tsx` | 气泡角色旁增加 `HH:mm` 时间 |
+| `state/turn.ts` | `ChatMessage.createdAt`；新消息写入本地时间 |
+| `state/reconnect.ts` | 历史消息透传 `created_at` |
+| `lib/time.test.ts` | 3 条：naive UTC、显式时区、无效值 |
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 63 tests passed
+npm run build       # 通过；dist JS 815.56 kB（gzip 257.57 kB）
+```
+
+### 边界
+
+- 按浏览器本地时区展示；服务端统一 UTC。
+- 实时消息时间取浏览器当前时间；刷新后以服务端 `created_at` 为准。
+
+---
+
+## 12.10 · 退款原因改为选项 + 其他原因输入（2026-11-16）
+
+### 问题
+
+退款流程追问原因时只给一句文本，用户需要自己打字；原因码是固定三类
+（质量问题 / 不想要了 / 其他），完全可以做成按钮。
+
+### 修改
+
+| 文件 | 内容 |
+|---|---|
+| `app/graph/rules_exit.py › _ask_reason` | 返回 3 个 `select_reason` 动作：quality / no_reason / other（other 带 `needs_text`） |
+| `app/core/slot_fill.py` | `select_reason` → `reason_code`；other 必须带 `reason_text` |
+| `client/src/components/ActionBar.tsx` | 渲染原因按钮；“其他原因”打开 Modal + TextArea，提交后带 `reason_text` |
+| `client/src/lib/actionLabel.ts` | 原因动作映射成用户消息文本 |
+| `tests/core/test_slot_fill.py`、`tests/graph/rules/test_intake.py`、`client/src/components/actions.test.tsx` | 覆盖固定原因、其他原因、无文本拒绝、动作列表 |
+
+### 实际流程
+
+```text
+请提供订单号 → 选择订单
+→ 请问退货原因（质量 / 不想要了 / 其他）
+→ 选「商品有质量问题」→ 直接继续
+→ 选「其他原因」→ 弹窗输入 → 提交后继续
+```
+
+### 验证
+
+```bash
+uv run pytest -q          # 1076 passed, 10 skipped
+uv run ruff check .       # 通过
+
+cd client
+npm run typecheck         # 通过
+npm test                  # 10 files, 65 tests passed
+npm run build             # 通过；dist JS 845.30 kB（gzip 266.71 kB）
+```
+
+### 边界
+
+- `other` 的补充说明进入 `refund_draft.reason_text`，供判定 prompt 参考；
+- 但判定仍按固定 `reason_code` 三分类走，不新增枚举；
+- 其他原因的文本框最多 200 字。
+
+---
+
+## 12.11 · 「其他原因」弹窗计数遮挡修复（2026-11-16）
+
+### 问题
+
+antd `Input.TextArea` 的 `showCount` 默认把计数绝对定位在输入框下方，
+正好压到 Modal footer 的「提交」按钮上，出现 `0 / 200` 和按钮重叠。
+
+### 修改
+
+```css
+.reason-modal .ant-input-textarea-show-count .ant-input-data-count {
+  position: static;
+  display: block;
+  margin-top: 4px;
+  text-align: right;
+}
+```
+
+计数改为正常文档流，放在输入框下方、footer 上方，不再遮挡按钮。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 65 tests passed
+npm run build       # 通过；dist JS 845.33 kB（gzip 266.72 kB）
+```
+
+---
+
+## 12.12 · 选项卡移入聊天流（2026-11-16）
+
+### 问题
+
+右侧「下一步」卡片和聊天内容分离：用户看到助手问“请选择订单/原因”，
+选项却在右侧栏，视线要来回跳；历史消息多时更容易错位。
+
+### 修改
+
+| 文件 | 旧行为 | 新行为 |
+|---|---|---|
+| `ChatWindow.tsx` | 只渲染消息 | 增加 `actions` / `onAction`，动作直接渲染在最后一条消息下方 |
+| `ActionBar.tsx` | 固定 Card + 「下一步」标题 | 新增 `embedded` 模式：只渲染按钮，不要 Card 外壳 |
+| `App.tsx` | 右侧栏同时放进度 + 动作 | 右侧栏只放进度；动作移入聊天流 |
+| `styles.css` | 无内联动作样式 | `.action-inline` 左对齐，和助手气泡对齐 |
+
+### 效果
+
+```text
+客服：请选择订单
+[CS-04 星光灰 · 1899.00 元]
+[ST-20 石墨灰 · 1249.00 元]
+[FB-10 奶油白 · 599.00 元]
+```
+
+选项紧跟在问题下面，右侧只保留「处理进度」。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 66 tests passed
+npm run build       # 通过；dist JS 845.52 kB（gzip 266.78 kB）
+```
+
+---
+
+## 12.13 · 内联选项改为纵向卡片（2026-11-16）
+
+### 问题
+
+选项虽然移进了聊天流，但三个订单按钮横排：
+- 一屏放不下，第三张被裁切；
+- 只有 `标题 · 金额`，没有订单状态，像普通按钮；
+- 和助手气泡的层级不够清楚。
+
+### 修改
+
+| 文件 | 旧样式 | 新样式 |
+|---|---|---|
+| `ActionBar.tsx` | 内嵌时 `Space wrap` 横排 | `Space direction="vertical"` 纵向列表 |
+| `ActionBar.tsx` | 订单按钮 `title · amount` 一行 | 两行：标题 + `状态 · 金额` |
+| `styles.css` | `.action-inline` 只做左对齐 | 最大宽度 420px、按钮全宽、纵向卡片、其他原因虚线 |
+
+### 效果
+
+```text
+客服：没有找到这笔订单，您可以选一笔最近的订单：
+┌──────────────────────────────┐
+│ CS-04 星光灰                 │
+│ 待发货 · 1899.00 元          │
+└──────────────────────────────┘
+┌──────────────────────────────┐
+│ ST-20 石墨灰                 │
+│ 已发货 · 1249.00 元          │
+└──────────────────────────────┘
+```
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 66 tests passed
+npm run build       # 通过；dist JS 845.88 kB（gzip 266.87 kB）
+```
+
+---
+
+## 12.14 · 订单选项卡片视觉增强（2026-11-16）
+
+### 问题
+
+纵向卡片虽然不裁切了，但仍像普通白底按钮：
+- 只有标题 + 状态/金额，层级弱；
+- 缺少“可选”暗示，没有 hover/箭头；
+- 卡片面积大、留白多。
+
+### 修改
+
+| 文件 | 新样式 |
+|---|---|
+| `ActionBar.tsx` | 订单卡：左侧购物图标 + 标题 + 状态 Tag/金额 + 右侧箭头；图标 aria-hidden |
+| `styles.css` | 卡片 hover 左移 2px、蓝色描边、阴影；`option-icon/copy/meta/arrow` 分层 |
+| `actions.test.tsx` | 适配可访问名称（装饰图标不参与） |
+
+### 效果
+
+```text
+[🛍] CS-04 星光灰            ›
+     待发货 · 1899.00 元
+
+[🛍] ST-20 石墨灰            ›
+     已发货 · 1249.00 元
+```
+
+原因选项保持紧凑卡片，右侧箭头提示可点。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 66 tests passed
+npm run build       # 通过；dist JS 847.07 kB（gzip 267.13 kB）
+```
+
+---
+
+## 12.15 · 选项卡片跟随产生它的助手消息（2026-11-16）
+
+### 问题
+
+选项虽然移进了聊天流，但渲染在**整个消息列表末尾**：
+- 用户点完「选择订单 1003」后，新用户气泡插在选项上方；
+- 卡片看起来像是挂在这条用户消息下面，位置不对；
+- 用户已经回答后，旧选项还留着。
+
+### 修改
+
+`ChatWindow.tsx`：
+
+- 计算 `lastAssistantIndex`；
+- 只在**最后一条消息是 assistant** 时展示该轮的 actions；
+- 选项渲染在对应 assistant 气泡之后，而不是整个列表末尾；
+- 用户一旦发出新消息（最后一条是 user），旧选项立即消失。
+
+### 效果
+
+```text
+客服：请选择订单
+[订单卡片 A]
+[订单卡片 B]
+[订单卡片 C]
+用户：选择订单 1003
+（旧卡片消失）
+客服：好的，请补充退款原因…
+```
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 67 tests passed
+npm run build       # 通过；dist JS 847.24 kB（gzip 267.19 kB）
+```
+
+---
+
+## 12.16 · 「其他原因」数字被当成订单号（2026-11-16）
+
+### 复现
+
+```text
+我要退款 订单1003
+→ 请选择退款原因
+→ 选择「其他原因」
+→ 输入 111111
+→ 错误：没有找到这笔订单，您可以选一笔最近的订单
+```
+
+### 原因
+
+恢复轮里 `slot_fill` 已经填好 `reason_code=other`，
+但图恢复后 `intake` 仍从 `raw_query="111111"` 里抽订单号，
+把上一轮选好的 `order_id=1003` 覆盖成了 `111111`。
+
+`reason_text` 里的数字被误当成订单号。
+
+### 修复
+
+`app/graph/rules_exit.py › intake`：
+
+```python
+existing = state.get("order_id")
+if existing and existing != order_id:
+    # 恢复轮补充的是原因/其他槽位，这句话里的数字不能覆盖已选订单
+    return {}
+```
+
+效果：
+
+- 已有订单 1003 时，输入「111111」不会被当成新订单；
+- 原因继续记为 `other + reason_text=111111`；
+- 本轮正常算金额：`1899.00 元`。
+
+### 验证
+
+```bash
+uv run pytest -q          # 1077 passed, 10 skipped
+uv run ruff check .       # 通过
+cd client
+npm test                  # 10 files, 67 tests passed
+```
+
+---
+
+## 12.17 · 删除会话（软删除）（2026-11-16）
+
+### 结论
+
+需要，但做**软删除**：只写 `conversations.deleted_at`，消息保留用于审计/回放；
+列表、历史、后续请求统一按“不存在”处理。
+
+### 修改
+
+| 文件 | 内容 |
+|---|---|
+| `app/db/repo_conversation.py` | `soft_delete_conversation`：归属校验 + `deleted_at=now` |
+| `app/api/conversations.py` | `DELETE /api/conversations/{cid}`，204；不存在/他人/已删统一 404 |
+| `client/src/lib/api.ts` | `deleteConversation(cid)` |
+| `client/src/hooks/useConversations.ts` | `removeConversation`：成功后从列表移除 |
+| `client/src/hooks/useChatSession.ts` | `handleDeleteConversation`：删除当前会话时 reset + 清 URL/localStorage |
+| `client/src/components/ConversationList.tsx` | hover 显示删除按钮，`Popconfirm` 二次确认 |
+| `tests/api/test_conversations_api.py`、`conversations.test.tsx` | 覆盖 204、404、二次确认 |
+
+### 交互
+
+- 鼠标移到会话上 → 右侧出现垃圾桶；
+- 点删除 → 气泡确认“删除这个会话？”；
+- 确认后从列表消失；
+- 如果删的是当前会话 → 清空聊天区并回到新对话；
+- 数据库仍保留该会话的消息。
+
+### 验证
+
+```bash
+uv run pytest -q          # 1079 passed, 10 skipped
+uv run ruff check .       # 通过
+cd client
+npm run typecheck         # 通过
+npm test                  # 10 files, 68 tests passed
+npm run build             # 通过；dist JS 852.76 kB（gzip 268.74 kB）
+```
+
+实际接口：删除返回 204，列表立即不再包含该会话。
+
+---
+
+## 12.18 · 多意图先澄清（最小版）（2026-11-16）
+
+### 问题
+
+输入：
+
+```text
+我要退款退货，另外还要查一下物流
+```
+
+旧行为只按主意图走退款，直接问「哪一单」，物流诉求被静默忽略。
+用户不知道系统到底在处理哪件事。
+
+### 原因
+
+`classify_intent` 只把 `multi_intent` 当返回值，没有写进 state；
+就算写了，`route_by_intent` 仍按 `intent` 路由到 `rules`；
+到了 fallback 子图，`物流` 关键词又会触发 ReAct，只答一半。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `app/graph/state.py` | 增加 `multi_intent: bool` |
+| `app/graph/nodes.py` | `classify_intent` 写 `multi_intent`；为 true 时 route→fallback |
+| `app/graph/nodes.py › fallback_exit` | 多意图优先返回澄清话术，不推转人工 |
+| `app/graph/routing.py › route_by_intent` | `multi_intent` 时强制 fallback，避免主意图抢跑 |
+| `app/graph/fallback_agent.py › after_gate` | 多意图绕过 ReAct，直接走 scripted/澄清 |
+| `tests/graph/*` | 补 4 条：节点路由、澄清话术、路由函数、绕过 ReAct |
+
+### 实际效果
+
+```text
+route: fallback / 退款申请
+progress: working
+delta: 您这句话里提到了不止一件事，想先处理哪一件？
+       可以告诉我是退款、查订单/物流，还是政策问题。
+```
+
+### 边界
+
+- 这是最小版：先反问，不记录 `pending_question`；下一轮用户说「先查物流」会重新分类。
+- 未实现“把两个意图都列出来并记住选择”；P5-11 标为 ⚠️ 而不是 ✅。
+
+### 验证
+
+```bash
+uv run pytest -q          # 1083 passed, 10 skipped
+uv run ruff check .       # 通过
+cd client
+npm test                  # 10 files, 68 tests passed
+```
+
+---
+
+## 12.19 · 处理进度移入聊天流（2026-11-16）
+
+### 问题
+
+右侧独立的「处理进度」卡片与聊天内容割裂：
+- 用户在主区域看回答，进度在右侧；
+- 对话变长后视线要来回跳；
+- 窄屏下右侧栏还会挤压聊天区。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `ProgressPanel.tsx` | 新增 `embedded` 模式：紧凑横排步骤，无 Card 外壳 |
+| `ChatWindow.tsx` | 接收 `progress` 节点；完成态挂在最后一条 assistant 下方，进行中挂在列表末尾 |
+| `App.tsx` | 删除右侧栏，进度作为 `progress` 传给聊天窗 |
+| `useChatSession.ts` | 删除 `showSide` |
+| `styles.css` | 新增 `.progress-inline` 紧凑样式；聊天列最大宽度 1040px 居中 |
+
+### 效果
+
+```text
+客服：支持七日无理由退货……
+处理进度  已检索知识库 → 已找到依据 → 已整理回答
+[相关引用]
+```
+
+进行中：
+
+```text
+正在处理…
+处理进度  已检索知识库 → 正在检查依据
+```
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 10 files, 69 tests passed
+npm run build       # 通过；dist JS 853.95 kB（gzip 269.09 kB）
+```
+
+---
+
+## 12.20 · 引用序号可点开看来源（2026-11-16）
+
+### 问题
+
+回答里的 `[1] [2] [3]` 原来只有 `title` tooltip：
+- 桌面要悬停才出现；
+- 移动端没有 hover；
+- 只显示标题，看不到依据原文。
+
+### 修改
+
+| 层 | 修改 |
+|---|---|
+| `app/api/chat.py` | `citations` 帧增加 `details`（id / section_path / text / source）；meta 持久化 `citations` |
+| `app/api/conversations.py` | 历史 meta 白名单增加 `citations` |
+| `client/src/state/turn.ts` | `CitationDetail`；citations 帧解析 details |
+| `client/src/state/reconnect.ts` | 历史恢复 citations |
+| `client/src/components/MessageBubble.tsx` | 序号改为 antd `Popover`，hover/click 打开；显示原文片段与来源文件 |
+| `styles.css` | 引用序号下划线、Popover 正文滚动 |
+
+### 效果
+
+```text
+支持七日无理由退货……[1]
+                           ↑ 点击
+┌────────────────────────────────────┐
+│ 退货政策是什么                     │
+│ 支持七日无理由退货：自签收次日起…  │
+│ 来源：faq.md                       │
+└────────────────────────────────────┘
+```
+
+### 验证
+
+```bash
+uv run pytest -q          # 1084 passed, 10 skipped
+uv run ruff check .       # 通过
+cd client
+npm run typecheck         # 通过
+npm test                  # 10 files, 70 tests passed
+npm run build             # 通过；dist JS 854.61 kB（gzip 269.32 kB）
+```
+
+---
+
+## 12.21 · 引用弹层尺寸与排版修正（2026-11-16）
+
+### 问题
+
+点开引用后，Popover 直接铺满整宽：
+- 长文本没有最大宽度；
+- `**` 和 `-` 原样展示，像原始 Markdown；
+- 换行被折叠成一大段；
+- 弹层覆盖整个聊天区。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `MessageBubble.tsx` | Popover `styles.body` 限制 `maxWidth:420` / `maxHeight:320`；`formatCitationText` 清理 `**`、转换列表符、去掉重复标题 |
+| `styles.css` | `.citation-popover` 最大宽 `min(380px,78vw)`、最大高 260px、`white-space: pre-wrap` |
+
+### 效果
+
+```text
+[1] 点击
+┌──────────────────────────────┐
+│ 退货政策是什么               │
+│ 支持七日无理由退货：……       │
+│ • 定作/定制商品不适用         │
+│ • 鲜活易腐商品不适用          │
+│ 来源：faq.md                 │
+└──────────────────────────────┘
+```
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 70 tests passed
+npm run build       # 通过；dist JS 854.84 kB（gzip 269.41 kB）
+```
+
+---
+
+## 12.22 · 去掉冗余的内联进度（2026-11-16）
+
+### 问题
+
+- 追问订单号时，助手问题下面还挂「处理进度 · 等待您补充信息」；
+- 发「物流查询」时，同时出现「处理进度 · 正在理解」和「正在处理…」；
+- 状态重复，打断“问题 → 选项”的阅读顺序。
+
+### 修改
+
+`ProgressPanel` 内联模式过滤掉不提供信息的步骤：
+
+- `waiting_info`：由助手问题和选项表达，整条进度隐藏；
+- `understanding` / `working`：与打字提示重复，隐藏；
+- 只有真正的处理步骤（核对订单 / 金额 / 检索 / 证据 / 回答 / 转接）才展示。
+
+### 效果
+
+- 问“哪一单”：直接是问题 + 订单卡片，不再夹一条“等待补充信息”；
+- 发“物流查询”：只显示「正在处理…」，不再出现「正在理解」；
+- 退款算出金额：仍显示「已核对订单 → 已算出金额 → 等待确认」。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 71 tests passed
+npm run build       # 通过；dist JS 854.96 kB（gzip 269.45 kB）
+```
+
+---
+
+## 12.23 · 继续按钮紧跟提示，进度放到动作之后（2026-11-16）
+
+### 问题
+
+助手回答末尾写着：
+
+> （您还有一笔未完成的数据查询，需要继续吗？）
+
+但「继续查询」按钮被「处理进度」隔开，出现在更下面；
+而且单按钮被拉成整行宽，像一张大横幅。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `ChatWindow.tsx` | 渲染顺序改为：助手消息 → actions → progress |
+| `styles.css` | 去掉 `.action-inline .ant-btn` 的 `width:100%`，只让 `.option-card` 全宽 |
+
+### 效果
+
+```text
+客服：……（您还有一笔未完成的数据查询，需要继续吗？）
+[继续查询]          ← 紧跟提示，按钮自适应宽度
+处理进度  已检索知识库 → 已找到依据 → 已整理回答
+```
+
+订单/原因选项仍然全宽；单个“继续/转人工”按钮不再拉满整行。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 71 tests passed
+npm run build       # 通过；dist JS 854.96 kB（gzip 269.46 kB）
+```
+
+---
+
+## 12.24 · 进度与打字提示去重（2026-11-16）
+
+### 问题
+
+处理中同时出现：
+
+```text
+处理进度  正在检索知识库
+正在处理…
+```
+
+两个加载状态说同一件事。
+
+### 修改
+
+- `ProgressPanel` 导出 `hasInlineProgress(route, progress, inFlight)`；
+- `App` 根据它计算 `showTyping`；
+- `ChatWindow` 在 `showTyping=false` 时不再渲染「正在处理…」；
+- 只有进度隐藏（如 fallback / waiting_info）时才用打字提示兜底。
+
+### 效果
+
+```text
+处理进度  正在检索知识库
+```
+
+不再跟一条「正在处理…」。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 72 tests passed
+npm run build       # 通过；dist JS 855.17 kB（gzip 269.53 kB）
+```
+
+---
+
+## 12.25 · 处理中改为助手“正在输入”气泡（2026-11-16）
+
+### 问题
+
+进度胶囊单独浮在左侧，下面还有「正在处理…」：
+- 两个加载状态重复；
+- 胶囊没有头像/气泡，和聊天气泡体系割裂；
+- 空白区域里只有一个小标签，视觉重量不足。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `ProgressPanel.tsx` | 导出 `inlineProgressLabel`：取当前 running 步骤的标题 |
+| `ChatWindow.tsx` | 处理中渲染一个助手 pending 气泡：头像 + 客服 + 三个跳动点 + 当前阶段文案 |
+| `App.tsx` | 传 `progressLabel`，不再传 `showTyping` |
+| `styles.css` | `.pending-bubble` / `.typing-dots` / 跳动动画 |
+
+### 效果
+
+```text
+[客] 客服  正在处理
+     • • •  正在检索知识库
+```
+
+完成后再显示正式助手气泡，进度摘要留在回答下方。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 72 tests passed
+npm run build       # 通过；dist JS 855.66 kB（gzip 269.60 kB）
+```
+
+---
+
+## 12.26 · 回复中禁用会话切换（2026-11-16）
+
+### 结论
+
+当前是**有意禁用**：`handleSelectConversation` 在 `state.inFlight` 时直接返回。
+因为前端只维护一份当前会话状态，回复中切换会让 SSE 回调写进错误会话。
+
+### 问题
+
+列表看起来仍可点击，点击却没反应；「新对话」按钮也没有禁用态。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `ConversationList.tsx` | 新增 `disabled`；会话项 `aria-disabled` + tooltip、点击忽略、删除/新对话按钮禁用 |
+| `App.tsx` | 传 `disabled={state.inFlight}` |
+| `styles.css` | 禁用项 opacity 0.55、`cursor:not-allowed`、隐藏删除按钮 |
+
+### 现在的交互
+
+- 回复中：左侧列表变灰，鼠标悬停提示“正在回复中，请稍候”；
+- 点会话不切换；
+- 「新对话」「删除」禁用；
+- 回复结束后恢复。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 73 tests passed
+npm run build       # 通过；dist JS 855.79 kB（gzip 269.65 kB）
+```
+
+---
+
+## 12.27 · 回复中允许确认切换会话（2026-11-16）
+
+### 问题
+
+直接禁用左侧列表交互不友好：用户只想看历史，却点不动。
+
+### 方案
+
+不再整块禁用；点击时如果当前还在生成，弹出确认：
+
+```text
+当前回复还在生成，切换会停止本次回复。
+[继续等待] [停止并继续]
+```
+
+- 取消 → 留在当前会话继续等；
+- 确认 → abort 当前 SSE，切换到目标会话；
+- 开始新对话同样走确认；
+- 回复中删除会话 → 提示“正在回复中，请稍后再删除”。
+
+### 实现
+
+| 文件 | 修改 |
+|---|---|
+| `useChatSession.ts` | `confirmStop` + `switchingRef`；abort 时由切换动作接管状态，避免落“已停止”提示到新会话 |
+| `App.tsx` | 移除列表 `disabled={state.inFlight}` |
+| `ConversationList.tsx` | 保留可选 `disabled` 能力，但默认不再因回复禁用 |
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 73 tests passed
+npm run build       # 通过；dist JS 856.09 kB（gzip 269.82 kB）
+```
+
+---
+
+## 12.28 · 新会话在生成中切换后不丢失（2026-11-16）
+
+### 问题
+
+新开一个会话并发消息，AI 生成中切到别的会话后，左侧新会话消失。
+
+### 原因
+
+- 新会话在 `ack` 时已经落库，但列表只在 `done` 时刷新；
+- 生成中切换会 abort，永远等不到 `done`；
+- 切换动作只加载目标会话，没有刷新列表。
+
+### 修改
+
+| 时机 | 行为 |
+|---|---|
+| 新会话收到 `ack` | 立即 `refreshConversations()`，列表马上出现 |
+| 确认切换会话 | abort 后先刷新列表，再加载目标 |
+| 开始新对话（回复中确认） | reset 后刷新列表，旧会话仍可见 |
+
+### 效果
+
+新会话在 AI 生成中切走：
+
+- 旧 SSE 被停止；
+- 旧会话仍出现在左侧列表；
+- 点回去能看到已保存的用户消息（assistant 未完成则不显示）；
+- 不会“新会话凭空消失”。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 73 tests passed
+npm run build       # 通过；dist JS 856.12 kB（gzip 269.84 kB）
+```
+
+---
+
+## 12.29 · 其他原因计数改为自定义（2026-11-16）
+
+### 问题
+
+antd `Input.TextArea` 的 `showCount` 计数仍然叠在输入框内部右下角，
+和边框/内容挤在一起；之前的 CSS 覆盖未生效。
+
+### 修改
+
+- 去掉 `showCount`；
+- 在 TextArea 下方渲染自定义计数：
+
+```tsx
+<div className="reason-counter">{otherReason.length} / 200</div>
+```
+
+- CSS 右对齐、11px、独立一行，不再绝对定位。
+
+### 效果
+
+```text
+┌──────────────────────────────┐
+│ 例如：尺码不合适…            │
+│                              │
+└──────────────────────────────┘
+                        0 / 200
+[取消]                 [提交]
+```
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 73 tests passed
+npm run build       # 通过；dist JS 856.19 kB（gzip 269.85 kB）
+```
+
+---
+
+## 12.30 · “其他原因”不能只填“其他”（2026-11-16）
+
+### 问题
+
+选退款原因「其他」，输入框里只填「其他」，系统仍按 `reason_code=other` 继续退款。
+退款结论对订单 1002 本身没错（已发货未签收 → 全额退），但输入没有信息量。
+
+### 修改
+
+`ActionBar.tsx` 对“其他原因”增加前端校验：
+
+```ts
+const GENERIC_REASONS = new Set([
+  "其他", "其他原因", "别的", "无", "没有", "不知道", "随便", "不想说",
+]);
+```
+
+- 命中泛化原因 → 不提交，输入框红色错误态；
+- 错误提示：「请补充具体原因，不要只填「其他」」；
+- 输入变化时清除错误。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 74 tests passed
+npm run build       # 通过；dist JS 856.46 kB（gzip 270.03 kB）
+```
+
+---
+
+## 12.31 · 新会话不再重复显示客服头（2026-11-16）
+
+### 问题
+
+新会话的欢迎页已经写着：
+
+```text
+您好，我是售后客服
+可以帮您查订单、算退款、解释售后政策。
+```
+
+上面还有一条「售后客服 / 智能客服 · 通常几秒内回复」的聊天头，信息重复。
+
+### 修改
+
+`ChatWindow.tsx`：`showWelcome` 为 true 时不渲染 `.chat-header`；
+发出第一条消息后，欢迎页消失，聊天头正常出现。
+
+### 效果
+
+```text
+新会话：
+[欢迎图标]
+您好，我是售后客服
+[查退款] [问政策] [找人工]
+
+发送后：
+[客服头像] 售后客服
+           智能客服 · 通常几秒内回复
+[消息列表]
+```
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 75 tests passed
+npm run build       # 通过；dist JS 856.47 kB（gzip 270.03 kB）
+```

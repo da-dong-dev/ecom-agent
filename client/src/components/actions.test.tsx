@@ -92,6 +92,80 @@ describe("ActionBar", () => {
     });
   });
 
+  it("emits select_reason for a fixed reason option", () => {
+    const onAction = vi.fn();
+    render(
+      <ActionBar
+        actions={[
+          {
+            type: "select_reason",
+            reason_code: "quality",
+            label: "商品有质量问题",
+          },
+        ]}
+        onAction={onAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "商品有质量问题" }));
+
+    expect(onAction).toHaveBeenCalledWith({
+      type: "select_reason",
+      reason_code: "quality",
+      label: "商品有质量问题",
+    });
+  });
+
+  it("asks for text when choosing the other reason", () => {
+    const onAction = vi.fn();
+    render(
+      <ActionBar
+        actions={[
+          { type: "select_reason", reason_code: "other", label: "其他原因" },
+        ]}
+        onAction={onAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "其他原因" }));
+    fireEvent.change(
+      screen.getByPlaceholderText("例如：尺码不合适、颜色和图片不一致、买重复了…"),
+      { target: { value: "尺码不合适" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+
+    expect(onAction).toHaveBeenCalledWith({
+      type: "select_reason",
+      reason_code: "other",
+      label: "其他原因",
+      reason_text: "尺码不合适",
+    });
+  });
+
+  it("rejects a generic other reason", () => {
+    const onAction = vi.fn();
+    render(
+      <ActionBar
+        actions={[
+          { type: "select_reason", reason_code: "other", label: "其他原因" },
+        ]}
+        onAction={onAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "其他原因" }));
+    fireEvent.change(
+      screen.getByPlaceholderText("例如：尺码不合适、颜色和图片不一致、买重复了…"),
+      { target: { value: "其他" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+
+    expect(onAction).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("请补充具体原因，不要只填「其他」"),
+    ).toBeTruthy();
+  });
+
   it("passes resume_flow through to the app", () => {
     const onAction = vi.fn();
     const action = { type: "resume_flow", flow: "refund" };

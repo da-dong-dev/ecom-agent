@@ -1,12 +1,15 @@
 # TODO 总表
 
-> 更新：2026-11-14
+> 更新：2026-11-16
 > 用途：把散在 plan / design / spec / acceptance 里的“待做、已知边界、触发条件”收成一张表。
 > 原则：**P0 是当前阻塞项；P1 是产品缺口；P2 是评测边界；P3 是技术债；P4 是触发后再做的优化。**
 
 ---
 
-## P0 · 当前 Ch08 的阻塞项
+## P0 · Ch08 阻塞项（已关闭）
+
+> 2026-11-16：P0-1 / P0-2 全部关闭；四场景与断流验收见
+> [ch08-acceptance.md](./ch08-acceptance.md)。
 
 来源：`docs/superpowers/specs/ch08-frontend-design.md` §0 / §11 / §14
 
@@ -14,9 +17,9 @@
 
 | # | 问题 | 建议 |
 |---|---|---|
-| 1 | 保存失败时是否接受 fail-closed（宁可不展示，也不展示刷新后会消失的回答） | 接受；与 C2-lite 的“看到即已存”一致 |
-| 2 | 是否用唯一部分索引 `uk_msg_reply` 强约束“一条用户消息最多一条助手回复” | 接受；并发重试靠 DB 兜底 |
-| 3 | 会话列表只做只读最近 20 条，不做搜索/重命名/删除 | 接受；范围控制 |
+| 1 | 保存失败时是否接受 fail-closed（宁可不展示，也不展示刷新后会消失的回答） | ✅ 已确认：接受；与 C2-lite 的“看到即已存”一致 |
+| 2 | 是否用唯一部分索引 `uk_msg_reply` 强约束“一条用户消息最多一条助手回复” | ✅ 已确认：接受；并发重试靠 DB 兜底 |
+| 3 | 会话列表只做只读最近 20 条，不做搜索/重命名/删除 | ✅ 已确认：接受；范围控制 |
 | 4 | `subgraphs=True` 接入成本高时，是否退化为 route + 计时提示 | ✅ Task 0 spike 通过：不降级，走真实 `progress` |
 
 ### P0-2 后端要先补的契约
@@ -67,7 +70,7 @@
 | # | 项 | 位置 | 说明 |
 |---|---|---|---|
 | 1 | 过时 TODO：dense 待验证 | `app/core/retrieval.py:257` | Ch07 已用 35 条稀有词复核，结论维持 dense；应删或改注释 |
-| 2 | 无 ALTER 迁移 | `scripts/init_db.py` | ✅ Ch08 Task 1：`scripts/migrate_ch08.py` 已加，`data/app.db` / `data/eval.db` 已迁移；README/启动检查在 Task 12 |
+| 2 | 无 ALTER 迁移 | `scripts/init_db.py` | ✅ Ch08 Task 1：`scripts/migrate_ch08.py` 已加；README 已补迁移命令（Task 12） |
 | 3 | 历史 run-02 快照 `retrieval=hybrid` | EvalFlow 历史 | 已修代码，不回写历史 run |
 | 4 | `.env` / DB 不进仓库 | 仓库根 | 已遵守；提交前检查 |
 | 5 | 单进程会话锁 | `app/core/lock.py` | 多 worker 要换 Redis/advisory lock |
@@ -103,7 +106,7 @@
 
 | # | 项 | 状态 |
 |---|---|---|
-| 1 | README 定稿（≤150 行，含局限） | ⏳ |
+| 1 | README 定稿（≤150 行，含局限） | ✅（124 行） |
 | 2 | 三张截图（主界面/进度/评测报告） | ⏳ |
 | 3 | 2 分钟演示视频（四个场景） | ⏳ |
 | 4 | 仓库公开前检查（无密钥、无真实数据） | ⏳ |

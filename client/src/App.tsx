@@ -1,19 +1,19 @@
-import { Flex, Tag, Typography } from "antd";
+import { Typography } from "antd";
 
-import { ActionBar } from "./components/ActionBar";
 import { ChatWindow } from "./components/ChatWindow";
 import { Composer } from "./components/Composer";
 import { ConversationList } from "./components/ConversationList";
-import { ProgressPanel } from "./components/ProgressPanel";
+import {
+  inlineProgressLabel,
+  ProgressPanel,
+} from "./components/ProgressPanel";
 import { useChatSession } from "./hooks/useChatSession";
 
-const ROUTE_LABELS: Record<string, string> = {
-  knowledge: "知识问答",
-  data: "订单查询",
-  rules: "退款核对",
-  human: "转人工",
-  fallback: "兜底处理",
-};
+const SUGGESTIONS = [
+  { label: "查退款", text: "订单1002 不想要了" },
+  { label: "问政策", text: "退货政策是什么" },
+  { label: "找人工", text: "我要投诉你们的客服" },
+];
 
 export default function App() {
   const {
@@ -22,35 +22,30 @@ export default function App() {
     conversationLoading,
     cooldown,
     visibleActions,
-    showSide,
     handleSend,
     handleRetry,
     handleAction,
     handleStop,
     handleNewConversation,
     handleSelectConversation,
+    handleDeleteConversation,
   } = useChatSession();
 
   return (
     <main className="app-shell">
-      <Flex
-        className="app-header"
-        justify="space-between"
-        align="flex-start"
-        gap={16}
-      >
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            电商客服 Agent
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            退款 / 订单 / 政策咨询
-          </Typography.Text>
+      <header className="app-header">
+        <div className="brand">
+          <div className="brand-logo">客</div>
+          <div>
+            <Typography.Title level={3} className="brand-title">
+              电商客服 Agent
+            </Typography.Title>
+            <Typography.Text className="brand-subtitle">
+              退款 · 订单 · 政策咨询，一次说清
+            </Typography.Text>
+          </div>
         </div>
-        {state.route ? (
-          <Tag color="blue">{ROUTE_LABELS[state.route] ?? state.route}</Tag>
-        ) : null}
-      </Flex>
+      </header>
 
       <div className="workspace">
         <aside className="conversation-panel">
@@ -60,44 +55,55 @@ export default function App() {
             loading={conversationLoading}
             onSelect={handleSelectConversation}
             onNew={handleNewConversation}
+            onDelete={(id) => {
+              void handleDeleteConversation(id);
+            }}
           />
         </aside>
 
-        <ChatWindow
-          messages={state.messages}
-          inFlight={state.inFlight}
-          error={state.error}
-          interrupted={state.interrupted}
-          retryDisabled={cooldown || state.messages.length === 0}
-          onRetry={() => {
-            void handleRetry();
-          }}
-        />
+        <section className="chat-column">
+          <ChatWindow
+            messages={state.messages}
+            inFlight={state.inFlight}
+            error={state.error}
+            interrupted={state.interrupted}
+            retryDisabled={cooldown || state.messages.length === 0}
+            suggestions={SUGGESTIONS}
+            progress={
+              <ProgressPanel
+                route={state.route}
+                progress={state.progress}
+                inFlight={state.inFlight}
+                embedded
+              />
+            }
+            progressLabel={inlineProgressLabel(
+              state.route,
+              state.progress,
+              state.inFlight,
+            )}
+            actions={visibleActions}
+            actionDisabled={state.inFlight || cooldown}
+            onSuggestion={(text) => {
+              void handleSend(text);
+            }}
+            onAction={(action) => {
+              void handleAction(action);
+            }}
+            onRetry={() => {
+              void handleRetry();
+            }}
+          />
 
-        {showSide ? (
-          <aside className="side-panel">
-            <ProgressPanel
-              route={state.route}
-              progress={state.progress}
-              inFlight={state.inFlight}
-            />
-            <ActionBar
-              actions={visibleActions}
-              disabled={state.inFlight || cooldown}
-              onAction={(action) => {
-                void handleAction(action);
-              }}
-            />
-          </aside>
-        ) : null}
+          <Composer
+            inFlight={state.inFlight}
+            disabled={cooldown}
+            onSend={handleSend}
+            onStop={handleStop}
+          />
+        </section>
+
       </div>
-
-      <Composer
-        inFlight={state.inFlight}
-        disabled={cooldown}
-        onSend={handleSend}
-        onStop={handleStop}
-      />
     </main>
   );
 }

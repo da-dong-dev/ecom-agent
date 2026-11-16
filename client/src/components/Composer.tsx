@@ -1,4 +1,5 @@
-import { Button, Card, Flex, Form, Input, Space } from "antd";
+import { SendOutlined, StopOutlined } from "@ant-design/icons";
+import { Button, Card, Flex, Form, Input, Space, Typography } from "antd";
 import { useState } from "react";
 
 const { TextArea } = Input;
@@ -44,7 +45,7 @@ export function Composer({
           void submit();
         }}
       >
-        <Flex className="composer" gap={10} align="flex-end">
+        <div className="composer-shell">
           <TextArea
             value={value}
             onChange={(event) => setValue(event.target.value)}
@@ -54,27 +55,41 @@ export function Composer({
                 void submit();
               }
             }}
-            placeholder="输入您的问题，Enter 发送，Shift+Enter 换行"
+            placeholder="输入您的问题，例如：订单1002 不想要了"
             maxLength={500}
-            showCount
-            autoSize={{ minRows: 2, maxRows: 6 }}
+            autoSize={{ minRows: 2, maxRows: 5 }}
+            variant="borderless"
             disabled={inFlight || submitting}
+            className="composer-input"
           />
 
-          <Space className="composer-actions">
-            {inFlight ? (
-              <Button onClick={onStop}>停止</Button>
-            ) : (
-              <Button
-                type="primary"
-                htmlType="submit"
-                disabled={busy || !value.trim()}
-              >
-                发送
-              </Button>
-            )}
-          </Space>
-        </Flex>
+          <Flex className="composer-footer" align="center" justify="space-between">
+            <Typography.Text type="secondary" className="composer-hint">
+              Enter 发送 · Shift + Enter 换行
+            </Typography.Text>
+            <Space size={8}>
+              {inFlight ? (
+                <Button
+                  icon={<StopOutlined />}
+                  onClick={onStop}
+                  className="composer-stop"
+                >
+                  停止
+                </Button>
+              ) : (
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  icon={<SendOutlined />}
+                  disabled={busy || !value.trim()}
+                  className="composer-send"
+                >
+                  发送
+                </Button>
+              )}
+            </Space>
+          </Flex>
+        </div>
       </Form>
     </Card>
   );

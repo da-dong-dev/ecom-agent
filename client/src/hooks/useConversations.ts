@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch } from "react";
 
 import {
+  deleteConversation as deleteConversationApi,
   getMessages,
   listConversations,
   type ConversationSummary,
@@ -94,10 +95,21 @@ export function useConversations(dispatch: Dispatch<TurnAction>) {
     }
   }
 
+  async function removeConversation(id: number): Promise<boolean> {
+    try {
+      await deleteConversationApi(id);
+      setConversations((items) => items.filter((item) => item.id !== id));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return {
     conversations,
     conversationLoading,
     refreshConversations,
     loadConversation,
+    removeConversation,
   };
 }

@@ -1,3 +1,4 @@
+import { Modal } from "antd";
 import { useReducer, useRef, useState } from "react";
 
 import { getMessages } from "../lib/api";
@@ -16,6 +17,7 @@ import {
   turnReducer,
   type AssistantAction,
 } from "../state/turn";
+import { visibleActionsFor } from "../state/visibleActions";
 import { useConversations } from "./useConversations";
 
 /**
@@ -28,11 +30,13 @@ export function useChatSession() {
   const [state, dispatch] = useReducer(turnReducer, initialTurnState());
   const [cooldown, setCooldown] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const switchingRef = useRef(false);
   const {
     conversations,
     conversationLoading,
     refreshConversations,
     loadConversation,
+    removeConversation,
   } = useConversations(dispatch);
 
   /**
@@ -101,8 +105,13 @@ export function useChatSession() {
         signal: controller.signal,
         onFrame: (frame) => {
           if (frame.event === "ack" && typeof frame.conversation_id === "number") {
+            const wasNewConversation = activeConversationId === null;
             activeConversationId = frame.conversation_id;
             rememberConversationId(frame.conversation_id);
+            if (wasNewConversation) {
+              // 新会话已经落库：左侧列表要立刻出现，不能等 done。
+              void refreshConversations();
+            }
           }
           if (frame.event === "error" && typeof frame.message === "string") {
             streamError = frame.message;
@@ -125,6 +134,11 @@ export function useChatSession() {
       }
     } catch (error) {
       if (controller.signal.aborted) {
+        if (switchingRef.current) {
+          // 用户确认“停止并切换”：由切换动作接管状态，不要再落中断提示。
+          switchingRef.current = false;
+          return;
+        }
         dispatch({ type: "interrupt", message: "已停止，可继续" });
         return;
       }
@@ -208,51 +222,75 @@ export function useChatSession() {
     }
   }
 
-  function handleNewConversation() {
-    if (state.inFlight) {
+  function confirmStop(title: string, content: string, action: () => void) {
+    if (!state.inFlight) {
+      action();
       return;
     }
-    dispatch({ type: "reset" });
-    forgetConversationId();
+    Modal.confirm({
+      title,
+      content,
+      okText: "停止并继续",
+      cancelText: "继续等待",
+      onOk: () => {
+        switchingRef.current = true;
+        abortRef.current?.abort();
+        action();
+      },
+    });
+  }
+
+  function handleNewConversation() {
+    confirmStop("开始新对话？", "当前回复还在生成，开始新对话会停止本次回复。", () => {
+      dispatch({ type: "reset" });
+      forgetConversationId();
+      void refreshConversations();
+    });
   }
 
   function handleSelectConversation(id: number) {
-    if (state.inFlight || id === state.conversationId) {
+    if (id === state.conversationId) {
       return;
     }
-    void loadConversation(id);
+    confirmStop("切换会话？", "当前回复还在生成，切换会停止本次回复。", () => {
+      void refreshConversations();
+      void loadConversation(id);
+    });
   }
 
-  const lastAssistant = [...state.messages]
-    .reverse()
-    .find((message) => message.role === "assistant");
-  const lastUser = [...state.messages]
-    .reverse()
-    .find((message) => message.role === "user");
-  const visibleActions = (lastAssistant?.actions ?? []).filter((action) => {
-    if (action.type !== "transfer_human") {
-      return true;
+  async function handleDeleteConversation(id: number) {
+    if (state.inFlight) {
+      dispatch({ type: "fail", message: "正在回复中，请稍后再删除会话。" });
+      return;
     }
-    return lastUser?.content !== "转人工";
-  });
-  const showSide =
-    Boolean(state.route) ||
-    state.progress.length > 0 ||
-    state.inFlight ||
-    visibleActions.length > 0;
+    const ok = await removeConversation(id);
+    if (!ok) {
+      dispatch({ type: "fail", message: "删除会话失败，请稍后重试。" });
+      return;
+    }
+    if (id === state.conversationId) {
+      dispatch({ type: "reset" });
+      forgetConversationId();
+    }
+  }
 
+  const visibleActions = visibleActionsFor(
+    state.messages,
+    state.route,
+    state.handoffStarted,
+  );
   return {
     state,
     conversations,
     conversationLoading,
     cooldown,
     visibleActions,
-    showSide,
     handleSend,
     handleRetry,
     handleAction,
     handleStop,
     handleNewConversation,
     handleSelectConversation,
+    handleDeleteConversation,
   };
 }

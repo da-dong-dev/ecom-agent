@@ -13,6 +13,16 @@ export function actionLabel(action: AssistantAction): string {
       return `选择规格 ${String(action.spec ?? "")}`.trim();
     case "resume_flow":
       return action.flow === "refund" ? "继续退费" : "继续";
+    case "select_reason":
+      if (action.reason_code === "quality") {
+        return "商品有质量问题";
+      }
+      if (action.reason_code === "no_reason") {
+        return "不想要了";
+      }
+      return typeof action.reason_text === "string" && action.reason_text
+        ? action.reason_text
+        : "其他原因";
     default:
       return action.type;
   }
