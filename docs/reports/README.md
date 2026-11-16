@@ -5,7 +5,7 @@
 > **文件保持平铺**：改名/移动会打断 80 多处引用（含代码 docstring 与脚本），
 > 找文件靠这张“按目的找”的表，不靠目录层级。
 
-**当前进度**：Ch01–Ch07 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)）；下一步 Ch08 前端。
+**当前进度**：Ch01–Ch07 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)）；Ch08 前端 Task 0–11 完成，Task 12 验收待做。
 
 > **第一次读 Ch07 / 想重新理解全章**：先看
 > [ch07-overview.md](./ch07-overview.md)——它把“为什么做、每个任务做什么、
@@ -145,6 +145,8 @@
 | [../interview/ch03-refund.md](../interview/ch03-refund.md) | Ch03：模型判定 + 代码复算、评测设计、踩坑故事 |
 | [../interview/ch04-data-exit.md](../interview/ch04-data-exit.md) | Ch04：零模型调用、固定链、越权防枚举、模板回答 |
 | [../interview/ch05-multi-turn.md](../interview/ch05-multi-turn.md) | Ch05：DB 三字段恢复、窗口、park、锁、只读 ReAct |
+| [../interview/ch06-security.md](../interview/ch06-security.md) | Ch06：归属、404、Prompt 四区、输出检查、日志 |
+| [../interview/ch07-eval.md](../interview/ch07-eval.md) | Ch07：44 条评测集、双回路、阈值、退款困难组、judge 方差 |
 | [../interview/database-qa.md](../interview/database-qa.md) | 数据库问答：索引 / 事务 / WAL / async ORM |
 | [../interview/self-test.md](../interview/self-test.md) | 自测方法：抽题表、评分标准、模拟面试与演示脚本 |
 

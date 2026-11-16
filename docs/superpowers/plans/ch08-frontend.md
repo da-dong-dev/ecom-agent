@@ -829,6 +829,10 @@ type TurnState = {
 
 ## Task 11: 断流重连（C2-lite）
 
+> 状态：✅ 已完成（2026-11-16）。验证：前端 8 files / 54 tests passed；typecheck / build 通过。
+> 追加：App 逻辑抽到 `hooks/useChatSession.ts` / `hooks/useConversations.ts` / `lib/storage.ts`，
+> `App.tsx` 449 → 103 行；纯重构，行为不变。
+
 **目的：** 断流/刷新后不重复、不跳变。
 
 **Files:**

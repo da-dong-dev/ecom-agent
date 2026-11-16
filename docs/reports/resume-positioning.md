@@ -2,9 +2,17 @@
 
 > **用途**：防止简历写了还没做的东西。每条措辞标注【可用时点】和【面试会被追问什么】。
 > **规则**：只有代码 + 验收都完成的描述才允许进简历。答不上来三层的词，一个都不写。
-> 更新于 2026-11-03（Ch02 已完成，Ch03 已验收）。
+> 更新于 2026-11-16（Ch01–Ch07 已验收；Ch08 Task 0–11 完成，Task 12 待做）。
 
-## 一、三阶段措辞
+## 〇、当前状态（2026-11-16）
+
+- **Ch01–Ch07**：已验收；Ch07 的 44 条评测、确定性回归、阈值曲线、退款困难组都有报告。
+- **Ch08 后端契约**：已完成（迁移 / 回放 / 历史接口 / progress 帧 / 转人工短路）。
+- **Ch08 前端**：聊天窗、进度面板、动作卡片、历史恢复、会话列表、断流重连已完成（Task 0–11）；
+  **Task 12 四场景验收还没做**。
+- 因此：Ch07 指标可以写；Ch08 前端可以写“已实现”，但**不要写“前端完成 / 四场景验收通过”**，等 Task 12。
+
+## 一、分阶段措辞
 
 ### 阶段 1 · 现在可用（Ch01 已完成）
 
@@ -22,10 +30,10 @@ Python / SQLAlchemy / FastAPI / SQLite
 ```
 
 **为什么可以写**：Ch01 的 8 个 commit 全部落地，可随时演示。
-（当时 30 条测试；Ch03 验收后全量为 **586 passed, 41 skipped**——
+（当时 30 条测试；当前全量为 **1060 passed, 14 skipped**——
 简历上不必写测试条数，见「三、当前红线」。）
 
-### 阶段 2 · Ch03 已完成（现在可写）
+### 阶段 2 · Ch03 已完成（历史阶段，仍可写）
 
 ```
 · 金额可复现：C 出口 9 状态确定性流水线，退费计算为纯函数
@@ -45,7 +53,7 @@ Python / SQLAlchemy / FastAPI / SQLite
 - "为什么模型 7/10 还敢上线？" → 答：流水线有 `compliance` 兜底，分歧必转人工；
   错放率 0%，没有出现"该拒的判成可退"。
 
-### 阶段 3 · Ch05 完成后，换标题（已满足）
+### 阶段 3 · Ch05 完成后，换标题（历史阶段，仍可写）
 
 ```
 ecom-agent · 电商售后客服 Agent —— 确定性 Workflow + 只读 ReAct 混合架构
@@ -73,8 +81,33 @@ Python / LangGraph / FastAPI / SQLite / Chroma
   client_message_id 幂等去重；每节点一行 trace_span。
 ```
 
+> 评测部分已被阶段 4 取代：优先写 44 条 / run-03 / held-out；30 条 gold set 只作为 Ch03 历史结果。
+
 **为什么这么定标题**：`[项目名] · [场景] —— [架构一句话]`。前 12 字内出现 Agent / Workflow，
 HR 扫读能命中关键词；「混合架构」这四个字本身就是取舍能力的信号。
+
+### 阶段 4 · Ch07 已验收；Ch08 前端进行中（2026-11-16）
+
+```
+· 评测：44 条 / 7 桶端到端评测；确定性回归 44/44；
+  run-03 correctness 0.9977、recall 1.00、faithfulness 1.00；
+  退款困难组 dev 10/10、held-out 15/15（模型），流水线 8/10、13/15；
+  held-out 不是严格盲测，报告里注明。
+
+· 后端契约（Ch08）：助手消息 reply_to_client_message_id + 唯一部分索引；
+  同一 client_message_id 回放；会话/历史接口；LangGraph 子图 progress 帧；
+  转人工结构化入口；保存失败 fail-closed。
+
+· 前端（Ch08 Task 0–11）：React + Vite + TypeScript；SSE 帧 reducer；
+  进度面板（核对中/已算出/待确认）；订单/规格动作卡片 + 转人工；
+  刷新后历史恢复与会话列表；antd 组件 + 自定义聊天气泡；45 条前端单测。
+```
+
+**可用时点**：
+
+- Ch07 的指标**现在可以写**，但必须带上下文：44 条、run-03、held-out 非严格盲测。
+- Ch08 前端**可以写“已实现”**；**不要写“前端完成 / 四场景验收通过”**，
+  Task 12（四场景验收）完成后才能写“完成”。
 
 ---
 
@@ -91,9 +124,14 @@ HR 扫读能命中关键词；「混合架构」这四个字本身就是取舍�
 | 9 状态确定性流水线 | `app/graph/rules_exit.py` | ✅ | 为什么不 ReAct？need_info 怎么恢复？ |
 | 金额纯函数 + 对拍 10/10 | `app/rules/refund.py`、`refund_10.json` | ✅ | 哪 10 份？边界怎么选？ |
 | 合规 = 红线 + 独立复算 | `app/graph/rules_exit.py` · `compliance` | ✅ | 为什么不以代码为准？分歧率怎么统计？ |
-| 30 条 gold set + 三列指标 | `scripts/eval_refund.py`、`docs/reports/refund-eval.md` | ✅ | 模型 / 规则 / 流水线分别是什么？为什么验收卡模型？ |
+| 44 条 / 7 桶端到端评测 | `data/eval/eval_v1.yaml`、`docs/reports/ch07-acceptance.md` | ✅ | 44 条怎么分桶？deterministic 44/44 是什么？ |
+| run-03 指标（correctness 0.9977 / recall 1.00） | `docs/reports/run-03.md` | ✅ | 为什么 relevance 0.89 而 correctness 0.9977？成本多少？ |
+| 退款困难组 dev 10 + held-out 15 + CI | `docs/reports/refund-hard.md`、`ch07-acceptance.md` | ✅ | 模型 10/10、15/15 为什么流水线只有 8/10、13/15？held-out 为什么不是盲测？ |
+| 证据闸阈值扫描 | `docs/reports/gate-thresholds.md`、`gate-thresholds.csv` | ✅ | 0.55 怎么选？双零区间是什么？ |
+| 后端契约：回放 / 历史 / progress / 转人工 | `app/api/chat.py`、`app/api/conversations.py`、`app/core/progress.py` | ✅ | 为什么要 reply_to 列？progress 为什么从子图取？保存失败为什么 fail-closed？ |
+| 前端 SSE / reducer / 进度 / 动作 / 历史 / 断流 | `client/src/lib/sse.ts`、`state/turn.ts`、`components/ProgressPanel.tsx`、`ActionBar.tsx`、`state/reconnect.ts` | ✅（Task 0–11；验收待 Task 12） | 为什么用 reducer？历史怎么恢复？断流为什么先对账再重试？ |
 | 四类转人工集成测试 | `tests/graph/rules/test_transfer_paths.py` | ✅ | 哪四类？打桩了哪些依赖？ |
-| 评测样本量的统计意识 | `refund-eval.md` §七、P7-8 | ✅ | 10 条够吗？CI 多宽？怎么扩？ |
+| 评测样本量的统计意识 | `refund-hard.md`、`ch07-acceptance.md`（dev 10 + held-out 15） | ✅ | held-out 15 条够吗？CI 多宽？为什么不是盲测？ |
 | 只读 ReAct + 4 步封顶 | `app/core/react.py`、`fallback_agent.py` | ✅ | 为什么只读？步数为什么是 4？ |
 | 多轮：三字段 + 窗口 + park + 锁 | `app/core/session_state.py`、`history.py`、`lock.py` | ✅ | 为什么不用 checkpointer？ |
 | 幂等去重 | `repo_message.append_message` | ✅ | 并发重试怎么办？ |
@@ -105,14 +143,16 @@ HR 扫读能命中关键词；「混合架构」这四个字本身就是取舍�
 
 | 词 | 为什么 | 什么时候能写 |
 |---|---|---|
-| **精确的准确率数字**（如「判定准确率 70%」） | n=10 的 95% CI ≈ [40%, 89%]，只能讲方向 | P7-8 扩到 n≥20 且留盲测后 |
+| 不带上下文的「准确率 99.77%」 | 指标必须带数据集 / 运行 / 样本量；held-out 非严格盲测 | 写「44 条 run-03 correctness 0.9977」可以；单独写「准确率 99.77%」不行 |
 | 任何准确率、延迟、成本数字 | 必须有 `docs/reports/` 的运行记录 | 有记录才写，并注明样本量 |
+| 前端完成 / 四场景验收通过 | Task 12 还没做 | Task 12 完成后 |
 | 高并发 / 支撑 QPS | 无压测 | 不做压测就别写 |
 | 线上 / 生产环境 | 从未部署 | 保持「本地可运行」的表述 |
 
-> **可以写**：混合检索 / RRF / hit@3（Ch02 已完成，见 `retrieval-eval.md`）、
+> **可以写**：混合检索 / RRF / hit@3（Ch02，见 `retrieval-eval.md`）、
 > 端到端 P95 4.72s（n=5，见 `ch03-acceptance.md`）、
-> 多轮退款轮中位 3.62s / ReAct 中位 2.59s（n=5，见 `ch05-acceptance.md`）。
+> 多轮退款轮中位 3.62s / ReAct 中位 2.59s（n=5，见 `ch05-acceptance.md`）、
+> 44 条评测 + deterministic 44/44 + run-03 指标（见 `ch07-acceptance.md` / `run-03.md`）。
 
 ---
 
@@ -120,10 +160,14 @@ HR 扫读能命中关键词；「混合架构」这四个字本身就是取舍�
 
 简历上的每一句都可能被追问。逐题的答法、依据代码位置、不能说的话，见：
 
-- [面试材料索引](../interview/README.md)：三章共用结构与跨章主线
+- [面试材料索引](../interview/README.md)：各章共用结构与跨章主线
+- [项目复习手册](./project-review.md)：Ch02/03/05 主线、四格卡、决策地图
 - [Ch01 数据地基](../interview/ch01-data-foundation.md)：双写 DDL、幂等、越权
 - [Ch02 检索与骨架](../interview/ch02-retrieval-skeleton.md)：查表路由、检索选型、证据闸
 - [Ch03 退款流水线](../interview/ch03-refund.md)：架构取舍、评测设计、踩坑故事
+- [Ch04 数据出口](../interview/ch04-data-exit.md)、[Ch05 多轮](../interview/ch05-multi-turn.md)
+- [Ch07 导读](./ch07-overview.md)、[Ch07 验收](./ch07-acceptance.md)：44 条评测与已知边界
+- [Ch07 面试要点](../interview/ch07-eval.md)：双回路、阈值、退款困难组、judge 方差
 
 ## 五、措辞纪律
 

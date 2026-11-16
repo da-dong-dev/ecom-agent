@@ -625,6 +625,159 @@ PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run
 - 移动端通过 antd `Grid` 断点折叠成一行状态条；完整步骤在桌面显示。
 - 构建仍超过 500 kB（antd）；Task 12 再评估 code split。
 
+---
+
+## 10 · 历史恢复 + 会话列表（2026-11-16）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/components/ConversationList.tsx` | antd `Card` / `List` / `Tag`：标题、更新时间、未完成流程标记、新对话 |
+| `client/src/state/reconnect.ts` | `readConversationId`（URL → localStorage）+ 历史接口 → `TurnState` |
+| `client/src/state/reconnect.test.ts` | 7 条：URL/存储优先级、历史映射、等待/转人工、会话隔离 |
+| `client/src/components/conversations.test.tsx` | 2 条：列表顺序/点击切换、新对话 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `App.tsx` | 只有当前内存会话 | 启动时拉会话列表；按 URL/localStorage 选会话；点击切换；新对话清状态 | 刷新/换设备后要能恢复 |
+| `state/turn.ts` | 没有历史动作 | 新增 `history` action 和 `isAssistantAction` 导出 | 历史接口返回的 assistant meta 要还原动作 |
+| `App.tsx › runChat` | ack 只更新 reducer | ack 写 `lastConversationId` + URL `?c=`；done 后刷新列表 | 新会话要出现在列表里，刷新后能找回 |
+| `styles.css` | 两栏 | 三栏：会话列表 / 聊天 / 进度+动作；移动端堆叠 | 列表需要独立区域 |
+
+### 验证
+
+```bash
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run typecheck
+# 通过
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run test
+# 7 files, 45 tests passed
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run build
+# vite v5.4.21；dist JS 806.54 kB（gzip 254.28 kB）
+
+# 联调冒烟（后端 8090 + 前端 5190）
+# GET 127.0.0.1:5190/api/conversations → HTTP 200（Vite proxy 正常）
+```
+
+### 关键行为
+
+- 启动恢复优先级：URL `?c={id}` → `localStorage.lastConversationId` → 最近一条会话 → 新会话。
+- 历史接口消息 → UI：
+  - user：`client_message_id` 保留，供重试；
+  - assistant：`citation_ids` → 角标，`actions` → 动作卡片；
+  - `signals.amount/pending_question` → 进度面板最终状态；
+  - 最后一条 user 的 `selected_action` → `lastSelectedAction`。
+- 会话列表：按接口顺序展示最近 20 条，标未完成退款/查询；点击切换；新对话清空当前状态和 URL。
+- 新会话在 `ack` 后写 URL/localStorage，`done` 后刷新列表。
+- 切换会话不会串消息；`buildHistoryState` 是纯函数。
+
+### 边界
+
+- 断流对账/重试合并在 Task 11；本 task 只处理已完成历史。
+- 列表只读，不做搜索/重命名/删除；最多 20 条（后端限制）。
+- 移动端会话列表放在顶部（最高 180px），不单独做抽屉。
+- 历史加载失败不阻塞新对话；404 会清空并提示重新开始。
+
 ### 下一步
 
-- Task 10：历史恢复 + 会话列表。
+- Task 11：断流重连（C2-lite）。
+
+---
+
+## 11 · 断流重连（C2-lite）（2026-11-16）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/state/reconnect.ts › reconcileHistory` | 按 `reply_to_client_message_id === 本地 client_message_id` 判断服务端是否已保存本轮回复；命中则整段替换，未命中返回 `pending` |
+| `client/src/state/reconnect.test.ts` | 4 条：命中替换、未保存、不同 id、error 消息不算完成 |
+| `client/src/state/turn.test.ts` | 3 条：新一轮不追加到上一轮回答、重试丢掉未完成草稿、interrupt 保留本地内容 |
+| `client/src/components/chat-window.test.tsx` | 2 条：普通错误按钮为“重试”；断流状态按钮为“继续” |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `App.tsx › runChat` | 流结束就返回，没有 `done` 也不对账 | 记录 `sawDone`；没有 `done` 或网络断开时调用 `recoverAfterDisconnect` | 断流后服务端可能已保存回答，直接用本地半截内容会跳变 |
+| `App.tsx › recoverAfterDisconnect` | 无 | 拉 `GET /messages`，命中则 `history` 替换；未命中显示“继续”；历史失败保留本地并报错 | 这是 C2-lite 的核心：历史对账 + 同幂等键重试 |
+| `App.tsx › handleStop` | abort 后没有任何提示 | abort 后由 catch 落 `interrupt`，按钮变“继续” | 用户停止也要能用同一个 id 继续 |
+| `state/turn.ts › TurnState` | 没有断流标记 | 增加 `interrupted`；`interrupt` action 保留消息/进度 | 区分“可继续的断流”和普通错误 |
+| `state/turn.ts › appendDelta/patchAssistant` | 总是找最后一条 assistant | 只找当前用户消息之后的 assistant | 多轮时会把新回答追加到上一轮回答上 |
+| `state/turn.ts › retry` | 保留未完成 assistant 草稿 | 丢掉当前轮草稿再重放 | 否则回放 `delta` 会叠在草稿上，出现重复 |
+| `components/ChatWindow.tsx` | 错误按钮固定“重试” | `interrupted` 时用 warning + “继续” | 断流不是普通错误，用户需要明确的继续动作 |
+
+### 验证
+
+```bash
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run typecheck
+# 通过
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run test
+# 8 files, 54 tests passed
+
+PATH=/Users/lidong/.nvm/versions/node/v20.20.2/bin:$PATH npm --prefix client run build
+# vite v5.4.21；dist JS 807.66 kB（gzip 254.55 kB）
+```
+
+### 关键行为
+
+- 正常流：收到 `done` → 不触发对账。
+- 流提前结束 / 网络断开：
+  1. 保留本地已收到的消息与进度；
+  2. `GET /api/conversations/{id}/messages` 对账；
+  3. 有 `reply_to_client_message_id === client_message_id` 的助手消息 → 用服务端最终内容、动作、金额替换本地草稿；
+  4. 没有 → 显示“连接中断，请点击继续”，保留本地内容；
+  5. 历史接口失败 → 显示“历史恢复失败，请重试”，本地内容不丢；
+  6. 历史接口 404（会话已删/不属于本人）→ 清空并提示重新开始。
+- 用户点“继续”才重试；复用同一个 `client_message_id` + `conversation_id`，不自动无限重试。
+- 429 `busy` → 冷却 5 秒并提示，不自动重试。
+- 用户停止 → `AbortController.abort()`；状态标记 `interrupted`，允许同一个 id 继续。
+
+### 边界
+
+- `ack` 丢失时前端没有 `conversation_id`，重试会新建会话；单会话 UI 不展示孤儿会话，跨会话去重不在 Ch08 范围（见 spec §7.4 / TODO P3 #8）。
+- 原请求仍在跑时重试会收到 429 `busy`；提示“还在处理”，不自动重试。
+- 本 task 不做 token 级断点续生成，也不做服务端片段 buffer。
+
+---
+
+## 11.1 · App 逻辑抽离（2026-11-16）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/hooks/useChatSession.ts` | 聊天会话状态与副作用：SSE 发送、断流对账、停止/重试/动作、派生 `visibleActions/showSide` |
+| `client/src/hooks/useConversations.ts` | 会话列表、启动恢复、切换会话、历史加载 |
+| `client/src/lib/storage.ts` | `getStorage` / `rememberClientMessageId` / `rememberConversationId` / `forgetConversationId` |
+| `client/src/lib/actionLabel.ts` | 动作卡片 → 回填文本 |
+
+### 修改与原因
+
+| 文件 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `App.tsx` | 449 行：状态、bootstrap、SSE、断流、动作、存储、JSX 全在一个组件 | 103 行：只保留布局，调 `useChatSession` | 逻辑和视图耦合，改一处要读整文件 |
+| `hooks/useChatSession.ts` | — | 组合 `useConversations` + 聊天执行逻辑 | 会话列表和单轮发送是两块独立职责 |
+| `hooks/useConversations.ts` | — | 列表/历史/bootstrap | 切换会话不应和 SSE 发送混在一起 |
+| `lib/storage.ts` | `App.tsx` 底部三个存储函数 | 独立模块 | localStorage/URL 细节不该留在页面组件 |
+| `lib/actionLabel.ts` | `App.tsx` 底部 `actionLabel` | 独立纯函数 | 可单测、可复用 |
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 8 files, 54 tests passed
+npm run build       # 通过；dist JS 808.27 kB（gzip 254.74 kB）
+```
+
+### 边界
+
+- 纯重构，行为不变；Task 11 的断流/重试逻辑原样搬到 hook。
+- 没有引入状态管理库；`useReducer + hooks` 足够当前规模。
+- App 现在只负责布局；后续加页面时不需要再改聊天执行逻辑。
