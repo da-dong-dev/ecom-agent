@@ -1,7 +1,7 @@
 # Ch09 数据飞轮 · 改动记录
 
 > 只增不改：记录每个 Task 的产出、为什么这样做、怎么验证。
-> 当前状态：Task 0–2 完成，尚未提交。
+> 当前状态：Task 0–3 完成，尚未提交。
 
 ---
 
@@ -245,3 +245,95 @@ uv run ruff check .
 
 - 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) D-F6、§3.3、§4。
 - 下一步：Task 3（审核 CLI/API）。
+
+---
+
+## 3 · Task 3 · 审核服务 + CLI/API（2026-11-18）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `app/core/review.py` | 队列、详情、approve、reject；统一错误类型 |
+| `app/api/review.py` | 4 个审核接口；`ENABLE_REVIEW_API` 开关 |
+| `scripts/review.py` | CLI：list / show / approve / reject |
+| `tests/core/test_review_service.py` | 11 条状态机与详情测试 |
+| `tests/api/test_review_api.py` | 6 条 HTTP 映射与开关测试 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/main.py` | 只注册 eval/conversations | 注册 review router | 审核 API 不注册就不存在 |
+| `app/config.py` | 只有 `enable_eval_api` | 增加 `enable_review_api=False` | 审核会写 FAQ，不能默认暴露 |
+| `.env.example` | 只有 `ENABLE_EVAL_API` | 增加 `ENABLE_REVIEW_API=false` | 本地演示时知道要打开哪个开关 |
+
+### 服务语义
+
+```text
+list_queue(status=None)
+  → 默认只返回 pending canonical
+  → status 可切到 approved / rejected / written_back
+  → 按 occurrence DESC, id DESC
+
+get_detail(id)
+  → canonical + 归并原话 + retrieved 快照
+  → retrieved 三态保留：NULL / [] / [...]
+
+approve(id, answer)
+  → 空答案 422
+  → 非 pending 409
+  → 写 faq(pending) + canonical.status=approved
+  → 重复 approve 409，不重复写 FAQ
+
+reject(id, reason)
+  → 非 pending 409
+  → canonical.status=rejected（终态）
+```
+
+`retrieved` 快照通过 `load_chunks()` 把 id 映射回 `section/text/source`，审核时能直接看到“当时召回了什么”。
+
+### 边界
+
+| 边界 | 说明 |
+|---|---|
+| 驳回原因 | 目前只在响应/日志里返回，表里没有 `review_reason` 字段，不落库 |
+| KB 同步 | approve 只写 `faq(sync_status=pending)`；向量化是 Task 4 |
+| 并发 approve | 状态检查 + `uk_faq_source_question` 唯一索引兜底 |
+| API 默认关闭 | `ENABLE_REVIEW_API=false` 时所有审核接口 404 |
+
+### 验证
+
+```bash
+uv run pytest tests/core/test_review_service.py tests/api/test_review_api.py -q
+# 17 passed
+
+uv run pytest -q
+# 1117 passed, 9 skipped
+
+uv run ruff check .
+# All checks passed!
+```
+
+真实 CLI（临时库 `/tmp/ch09-task2.db`）：
+
+```text
+list → 12 条 pending canonical
+show 1 → canonical + retrieved=[] + merged_questions=[]
+approve 1 --answer "..." → status=approved，faq_id=1
+reject 2 --reason "暂不补库" → status=rejected
+重复 approve 1 → [失败] 当前状态不可通过：approved，exit=1
+```
+
+数据库核对：
+
+```text
+low_conf_questions id=1 status=approved，reviewed_at 非空
+faq id=1 question=价保规则是什么，source_type=flywheel，sync_status=pending
+low_conf_questions id=2 status=rejected
+```
+
+### 关联
+
+- 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §3.3、§4.4。
+- 下一步：Task 4（FAQ 写回 + KB 合并 + 检索验证）。
