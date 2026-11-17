@@ -169,6 +169,8 @@ HR 扫读能命中关键词；「混合架构」这四个字本身就是取舍�
 - [Ch04 数据出口](../interview/ch04-data-exit.md)、[Ch05 多轮](../interview/ch05-multi-turn.md)
 - [Ch07 导读](./ch07-overview.md)、[Ch07 验收](./ch07-acceptance.md)：44 条评测与已知边界
 - [Ch07 面试要点](../interview/ch07-eval.md)：双回路、阈值、退款困难组、judge 方差
+- [Ch08 验收](./ch08-acceptance.md)、[Ch08 面试要点](../interview/ch08-frontend.md)：
+  SSE 帧 reducer、进度/动作、历史恢复、C2-lite 断流
 
 ## 五、措辞纪律
 

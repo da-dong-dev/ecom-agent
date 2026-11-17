@@ -6,7 +6,8 @@
 > 找文件靠这张“按目的找”的表，不靠目录层级。
 
 **当前进度**：Ch01–Ch08 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)；
-Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已补，录屏待补；Ch09 数据飞轮为可选计划。
+Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已补，录屏待补；
+Ch09 数据飞轮为可选计划，Task 0–1（fixture + 数据层迁移）已完成。
 
 > **第一次读 Ch07 / 想重新理解全章**：先看
 > [ch07-overview.md](./ch07-overview.md)——它把“为什么做、每个任务做什么、
@@ -67,6 +68,7 @@ Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已�
 | [ch06-security-changes.md](./ch06-security-changes.md) | 安全：越权、404、Prompt 四区、输出检查、日志 | ✅ |
 | [ch07-eval-changes.md](./ch07-eval-changes.md) | 评测：44 条评测集、评测门面、EvalFlow、阈值与传导 | ✅ |
 | [ch08-frontend-changes.md](./ch08-frontend-changes.md) | 前端：SSE、进度、动作、历史、断流、验收 | ✅ |
+| [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 数据飞轮（离线模拟）：落池、标准化、审核、写回、评测 | 🚧 Task 1 |
 
 ### 3.2 验收报告（一章做完时写）
 
@@ -152,6 +154,7 @@ Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已�
 | [../interview/ch05-multi-turn.md](../interview/ch05-multi-turn.md) | Ch05：DB 三字段恢复、窗口、park、锁、只读 ReAct |
 | [../interview/ch06-security.md](../interview/ch06-security.md) | Ch06：归属、404、Prompt 四区、输出检查、日志 |
 | [../interview/ch07-eval.md](../interview/ch07-eval.md) | Ch07：44 条评测集、双回路、阈值、退款困难组、judge 方差 |
+| [../interview/ch08-frontend.md](../interview/ch08-frontend.md) | Ch08：SSE 帧 reducer、进度/动作、历史恢复、C2-lite 断流 |
 | [../interview/database-qa.md](../interview/database-qa.md) | 数据库问答：索引 / 事务 / WAL / async ORM |
 | [../interview/self-test.md](../interview/self-test.md) | 自测方法：抽题表、评分标准、模拟面试与演示脚本 |
 

@@ -2177,3 +2177,19 @@ ls -lh docs/assets/ch08/
 # 02-refund-progress.png 713K
 # 03-knowledge-citation.png 923K
 ```
+
+---
+
+## 12.36 · Ch08 面试材料（2026-11-17）
+
+新增 [ch08-frontend.md](../interview/ch08-frontend.md)：
+
+- 30 秒版本；
+- SSE 帧 → reducer → UI 架构；
+- C2-lite 断流恢复（两条路径、唯一索引、为什么不用 Last-Event-ID）；
+- 保存先于展示、进度/动作、实际转人工 vs 仅提供按钮；
+- 4 个 STAR 踩坑故事；
+- 追问清单、不要说的话、数字速查、5 分钟演示脚本。
+
+索引同步：`docs/interview/README.md`、`docs/reports/README.md`、
+`docs/reports/resume-positioning.md`、`docs/interview/self-test.md`。
