@@ -155,6 +155,18 @@ class Faq(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, **_created_at)
 
+    __table_args__ = (
+        # 同一条 canonical 只能写回一条 flywheel FAQ；manual 不受影响。
+        Index(
+            "uk_faq_source_question",
+            "source_question_id",
+            unique=True,
+            sqlite_where=text(
+                "source_type = 'flywheel' AND source_question_id IS NOT NULL"
+            ),
+        ),
+    )
+
 
 class LowConfQuestion(Base):
     """低置信池：飞轮入口，记录「系统答不好」的问题与当时证据。"""
@@ -165,6 +177,7 @@ class LowConfQuestion(Base):
     conversation_id: Mapped[int | None] = mapped_column(Integer)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     normalized: Mapped[str | None] = mapped_column(Text)
+    suggested_answer: Mapped[str | None] = mapped_column(Text)           # Ch09 模型建议答案，人工审核参考
     source: Mapped[str | None] = mapped_column(String)                   # retrieval_low_conf / feedback / rule_conflict
     reason: Mapped[str | None] = mapped_column(Text)
     retrieved: Mapped[str | None] = mapped_column(Text)                  # 三态：[] / [...] / NULL
@@ -176,6 +189,11 @@ class LowConfQuestion(Base):
     kb_ref: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, **_created_at)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        Index("idx_low_conf_status", "status"),
+        Index("idx_low_conf_merged_into", "merged_into"),
+    )
 
 
 # ============ 业务表 ============

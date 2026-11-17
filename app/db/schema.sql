@@ -82,12 +82,18 @@ CREATE TABLE IF NOT EXISTS faq (
   created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 同一条 canonical 只能写回一条 flywheel FAQ；manual 不受影响
+CREATE UNIQUE INDEX IF NOT EXISTS uk_faq_source_question
+ON faq(source_question_id)
+WHERE source_type = 'flywheel' AND source_question_id IS NOT NULL;
+
 -- 低置信池：飞轮入口，记录「系统答不好」的问题与当时证据
 CREATE TABLE IF NOT EXISTS low_conf_questions (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   conversation_id   INTEGER,                         -- 来自哪个会话（回放用）
   question          TEXT NOT NULL,                   -- 用户原话
   normalized        TEXT,                            -- 归一化后的标准问题（合并同类用）
+  suggested_answer  TEXT,                            -- Ch09 模型建议答案，人工审核参考
   source            TEXT,                            -- retrieval_low_conf / feedback / rule_conflict
   reason            TEXT,                            -- 判为低置信的原因（分数、守卫）
   retrieved         TEXT,                            -- JSON 三态：[...] / [] / NULL
@@ -98,6 +104,8 @@ CREATE TABLE IF NOT EXISTS low_conf_questions (
   created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   reviewed_at       DATETIME                         -- 审核时间；驳回即终审，不复活
 );
+CREATE INDEX IF NOT EXISTS idx_low_conf_status ON low_conf_questions(status);
+CREATE INDEX IF NOT EXISTS idx_low_conf_merged_into ON low_conf_questions(merged_into);
 
 -- ============ 业务表（落表而非 mock 函数：归属校验要在 SQL 层完成）============
 
