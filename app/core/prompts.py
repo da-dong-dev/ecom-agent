@@ -570,3 +570,68 @@ def evidence_judge_messages(
             ),
         },
     ]
+
+# ── 飞轮标准化（Ch09 Task 2）─────────────────────────────────
+
+FLYWHEEL_NORMALIZE_TOOL_NAME = "emit_flywheel_normalization"
+
+FLYWHEEL_NORMALIZE_SYSTEM = """## 角色
+你负责把「低置信问题池」里的用户原话，标准化成 FAQ 式问题，并判断它是否与已有标准问题重复。
+
+## 输入
+- `<raw_question>`：用户原话，可能有口语、情绪、错别字；
+- `<candidates>`：已经标准化过的候选问题，每行 `[id] 标准问题（出现次数）`。
+
+## 输出
+1. `normalized_question`：去掉情绪和口语后的标准问法，保留业务对象与关键限定；
+2. `matched_id`：如果和某个候选是同一件事，填候选 id；不确定就填 `null`；
+3. `suggested_answer`：给人工审核参考的建议答案；只写输入里能支持的内容，没有依据就留空字符串。
+
+## 规则
+- 只做标准化，不回答用户、不解释推理过程；
+- 去情绪、去重复、去寒暄，例如「气死我了，这破推车能退吗」→「婴儿推车能否退货」；
+- 同一件事的不同说法要合并，例如「推车能带上飞机吗」和「ST-20 可登机吗」；
+- `matched_id` **只能**来自 `<candidates>` 的 id；不能编造 id；
+- 不要臆造政策数字、时效、金额、型号参数；
+- 拿不准是否重复时，`matched_id` 填 `null`，让人工审核决定。
+"""
+
+FLYWHEEL_NORMALIZE_PARAMETERS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "normalized_question": {
+            "type": "string",
+            "description": "标准化后的 FAQ 式问题，保留业务对象与关键限定",
+        },
+        "matched_id": {
+            "anyOf": [{"type": "integer"}, {"type": "null"}],
+            "description": "命中的候选 id；没有匹配或不确定时为 null",
+        },
+        "suggested_answer": {
+            "type": "string",
+            "description": "给人工审核参考的建议答案；没有依据就留空字符串",
+        },
+    },
+    "required": ["normalized_question", "matched_id", "suggested_answer"],
+}
+
+
+def flywheel_normalize_messages(
+    raw_question: str, candidates: list[dict]
+) -> list[dict[str, str]]:
+    """飞轮标准化消息：用户原话 + 已标准化候选。"""
+    lines = [
+        f"[{item['id']}] {item['normalized']}（出现 {item.get('occurrence', 1)} 次）"
+        for item in candidates
+    ]
+    candidate_text = "\n".join(lines) or "（没有候选）"
+    return [
+        {"role": "system", "content": FLYWHEEL_NORMALIZE_SYSTEM + PROMPT_GUARD},
+        {
+            "role": "user",
+            "content": (
+                f"<raw_question>{raw_question}</raw_question>\n"
+                f"<candidates>\n{candidate_text}\n</candidates>"
+            ),
+        },
+    ]

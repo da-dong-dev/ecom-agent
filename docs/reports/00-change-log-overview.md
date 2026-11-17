@@ -98,7 +98,7 @@ grep -rn "替换：Ch02 §1" docs/reports/
 | Ch06 | 安全 | [ch06-security-changes.md](./ch06-security-changes.md) | ✅ 6 / 6 节（验收见 [ch06-acceptance.md](./ch06-acceptance.md)） |
 | Ch07 | 评测 | [ch07-eval-changes.md](./ch07-eval-changes.md) | ✅ 10 / 10（验收见 [ch07-acceptance.md](./ch07-acceptance.md)） |
 | Ch08 | 前端 | [ch08-frontend-changes.md](./ch08-frontend-changes.md) | ✅ 验收完成（三张截图已补；录屏待补） |
-| Ch09 | 数据飞轮（离线模拟） | [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 🚧 Task 1 |
+| Ch09 | 数据飞轮（离线模拟） | [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 🚧 Task 2 |
 
 ## 与其他报告的关系
 

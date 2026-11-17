@@ -1,7 +1,7 @@
 # Ch09 数据飞轮 · 改动记录
 
 > 只增不改：记录每个 Task 的产出、为什么这样做、怎么验证。
-> 当前状态：Task 0–1 完成，尚未提交。
+> 当前状态：Task 0–2 完成，尚未提交。
 
 ---
 
@@ -169,3 +169,79 @@ data/eval.db: suggested_answer 存在；3 个索引存在；low_conf 3 行、faq
 
 - 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §3.1/§3.2。
 - 下一步：Task 2（标准化 + 查重批处理 + `--seed-fixtures`）。
+
+---
+
+## 2 · Task 2 · 标准化 + 查重批处理（未提交）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `app/core/flywheel.py` | 标准化、候选匹配、embedding 二次校验、批处理、统计 |
+| `scripts/flywheel.py` | CLI：`--seed-fixtures` / `--limit` / `--dry-run` |
+| `tests/core/test_flywheel.py` | 9 条：新建、合并、驳回、幻觉 id、异常、同批同义、dry-run、seed |
+| `app/core/prompts.py › FLYWHEEL_NORMALIZE_*` | 标准化 prompt + function schema |
+
+### 处理流程
+
+```text
+取 pending + normalized IS NULL
+  → LLM 标准化 + 选候选 matched_id
+  → matched_id 不在候选 → skip
+  → 有 matched_id → embedding 相似度 >= 0.9 → merge
+  │                    └─ < 0.9 → 新建 canonical
+  → 无 matched_id → 精确标准问题匹配 → merge 或新建
+  → 命中：occurrence 原子 +1，原话 status=merged
+  → 未命中：写 normalized/suggested_answer，保持 pending
+  → 任一步异常：rollback 当前行，skip，下一轮可重试
+```
+
+关键点：
+
+- `matched_id` 只能来自候选；不存在直接 `skip`，不猜；
+- embedding 二次校验阈值 `0.9`，防止 LLM 误合并；
+- 精确标准问题匹配覆盖“同批两条同义”的情况；
+- `rejected` 候选可被命中、只累加 `occurrence`，不改回 `pending`；
+- `occurrence` 用 SQL `occurrence = occurrence + 1` 原子更新；
+- `--dry-run` 调模型但不写库；同批新建 canonical 不进入后续候选，统计只作预览。
+
+### 验证
+
+```bash
+uv run pytest tests/core/test_flywheel.py -q
+# 9 passed
+
+uv run pytest -q
+# 1100 passed, 9 skipped
+
+uv run ruff check .
+# All checks passed!
+```
+
+真实 CLI（临时库 `/tmp/ch09-task2.db`，不污染 `data/app.db`）：
+
+```text
+--seed-fixtures → inserted=12 skipped=0
+--limit 1 --dry-run → processed=1 merged=0 created=1 skipped=0
+--limit 1 → processed=1 merged=0 created=1 skipped=0
+--limit 20 → processed=11 merged=0 created=11 skipped=0
+```
+
+12 条 fixture 都生成了 canonical，`suggested_answer` 为空字符串时落库为 `NULL`。
+本批问题互不重复，所以没有触发 merge；merge 路径由测试覆盖。
+
+### 边界
+
+| 边界 | 说明 |
+|---|---|
+| 模型建议答案为空 | 没有知识依据时不臆造，人工审核时补答案 |
+| embedding 服务失败 | 当前行 skip，不改数据；修复服务后重跑 |
+| 候选只取 200 条 | 够 MVP；数据量上来后要换召回/分页 |
+| 同批 dry-run | 不写库，新建 canonical 不会进入后续候选 |
+| 写 FAQ / 审核 | 不做；Task 3/4 |
+
+### 关联
+
+- 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) D-F6、§3.3、§4。
+- 下一步：Task 3（审核 CLI/API）。
