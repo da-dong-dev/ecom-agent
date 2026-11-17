@@ -8,7 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import review as review_api
-from app.core.review import ReviewConflict, ReviewInvalid, ReviewNotFound
+from app.core.review import (
+    ReviewConflict,
+    ReviewInvalid,
+    ReviewNotFound,
+    ReviewSyncError,
+)
 from app.db.session import get_session
 
 
@@ -99,6 +104,37 @@ def test_approve_conflict_returns_409(client, enabled, monkeypatch):
     resp = client.post("/api/review/12/approve", json={"answer": "答案"})
 
     assert resp.status_code == 409
+
+
+def test_approve_sync_failure_returns_502(client, enabled, monkeypatch):
+    async def fake_approve(review_id, answer, *, session=None):
+        raise ReviewSyncError("FAQ 已写入，但知识库同步失败，请重试")
+
+    monkeypatch.setattr(review_api, "approve", fake_approve)
+
+    resp = client.post("/api/review/12/approve", json={"answer": "答案"})
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "sync_failed"
+
+
+def test_retry_success(client, enabled, monkeypatch):
+    async def fake_retry(review_id, *, session=None):
+        assert review_id == 12
+        return {
+            "id": 12,
+            "status": "written_back",
+            "faq_id": 3,
+            "kb_ref": "faq-3",
+            "kb_version": "v2",
+        }
+
+    monkeypatch.setattr(review_api, "retry_sync", fake_retry)
+
+    resp = client.post("/api/review/12/retry")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "written_back"
 
 
 def test_approve_and_reject_success(client, enabled, monkeypatch):

@@ -1,7 +1,7 @@
 # Ch09 数据飞轮 · 改动记录
 
 > 只增不改：记录每个 Task 的产出、为什么这样做、怎么验证。
-> 当前状态：Task 0–3 完成，尚未提交。
+> 当前状态：Task 0–4 完成，尚未提交。
 
 ---
 
@@ -337,3 +337,117 @@ low_conf_questions id=2 status=rejected
 
 - 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §3.3、§4.4。
 - 下一步：Task 4（FAQ 写回 + KB 合并 + 检索验证）。
+
+---
+
+## 4 · Task 4 · FAQ 写回 + KB 合并 + 检索验证（2026-11-18）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `app/kb/build.py` | 可复用的 build：静态语料 + FAQ → 向量化 → Chroma → 更新状态 |
+| `tests/kb/test_faq_chunks.py` | FAQ chunk 形状 |
+| `tests/kb/test_build_faq.py` | 版本、upsert、stale 删除、失败不假成功 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/kb/loader.py › faq_chunks` | 只加载静态 Markdown | 增加 FAQ → chunk 转换 | FAQ 必须和文档同构，才能复用同一套 upsert/删除 |
+| `app/kb/build.py › build_kb` | 逻辑只在脚本里 | 抽成可复用函数，返回版本/数量 | 审核通过后要同步，不能在 API 里 `subprocess` |
+| `scripts/build_kb.py` | 自己实现全部构建 | 只做 CLI 包装 | 避免 CLI 与审核同步两套逻辑漂移 |
+| `app/core/kb_version.py › current_kb_version` | 只哈希静态语料 | 静态语料 + 已审核 FAQ | `/api/meta` 必须反映 FAQ 写回后的版本 |
+| `app/main.py › /api/meta` | `cached_kb_version()` | `await current_kb_version()` | 旧缓存看不到 FAQ，且 lru_cache 会掩盖变化 |
+| `app/core/review.py › approve` | 只写 FAQ，状态 approved | 写 FAQ 后调用 `build_kb`，成功后 written_back | 审核通过不等于检索可用；必须向量化成功 |
+| `app/core/review.py › retry_sync` | 无 | approved 的 FAQ 可重试同步 | Chroma/Ollama 失败后不能要求重新审核 |
+| `app/api/review.py` | 无 retry / 502 | 增加 retry 路由与 `sync_failed=502` | 同步失败要可重试，不能返回 200 假成功 |
+| `scripts/review.py` | 无 retry | 增加 `retry` 子命令 | CLI 与 API 能力对齐 |
+
+### 同步顺序
+
+```text
+approve
+  → 写 faq(sync_status=pending)
+  → canonical.status=approved
+  → commit
+  → build_kb(session=同一个 session)
+       → 静态 chunks + FAQ chunks
+       → Chroma upsert / 删除 stale
+       → faq.sync_status=synced, faq.kb_version=version
+       → canonical.status=written_back, kb_ref=faq-{id}
+       → commit
+  → 返回 status=written_back
+```
+
+失败时：
+
+```text
+build_kb 失败
+  → canonical 仍是 approved
+  → faq 仍是 pending
+  → API 502 sync_failed
+  → scripts/review.py retry <id> 重试
+```
+
+### `retrieved` / 检索
+
+FAQ chunk：
+
+```text
+id      = faq-{faq.id}
+text    = question + "\n" + answer
+source  = "faq"
+section = question
+kind    = "faq"
+```
+
+`build_kb` 的 stale 删除覆盖 FAQ：如果 FAQ 行被停用/删除，下一次 build 会把
+`faq-*` 从 Chroma 删除。
+
+### 验证
+
+```bash
+uv run pytest tests/kb tests/core/test_review_service.py tests/api/test_review_api.py -q
+# 28 passed
+
+uv run pytest -q
+# 1128 passed, 9 skipped
+
+uv run ruff check .
+# All checks passed!
+```
+
+真实构建（临时库 + 隔离集合 `ecom_kb_ch09_test`）：
+
+```text
+chunks=58  faq=1  kb_version=db11667deb27
+检索「价保规则是什么」→ faq-1 第 1，similarity=0.6171
+canonical id=1 → written_back，kb_ref=faq-1
+faq id=1 → synced，kb_version=db11667deb27
+```
+
+真实审核同步（临时库 + 隔离集合 `ecom_kb_ch09_test2`）：
+
+```text
+approve id=3
+→ status=written_back，faq_id=2，kb_version=96c3c30eecd6
+检索「修改收货地址的规则是什么」→ faq-2 第 1，similarity=0.8146
+```
+
+两个临时集合已删除；未污染正式 `ecom_kb`。
+
+### 边界
+
+| 边界 | 说明 |
+|---|---|
+| 全量重建 | 每次 approve 都重建全部 chunk；MVP 可接受，数据量大后要增量 |
+| 同步失败 | canonical 保持 approved、FAQ pending；不假装 written_back |
+| 手工 FAQ | 会被合并进 KB，但没有 canonical，不会改低置信池状态 |
+| 版本口径 | `current_kb_version` 与 build 使用同一过滤条件 |
+| 审核驳回原因 | 仍只回显/记日志，不落库（Task 3 边界） |
+
+### 关联
+
+- 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §4.5、D-F11。
+- 下一步：Task 5（可选：点踩/规则冲突）或 Task 6（补库前后评测）。按计划先做 Task 6。

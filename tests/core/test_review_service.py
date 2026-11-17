@@ -8,12 +8,28 @@ from app.core.review import (
     ReviewConflict,
     ReviewInvalid,
     ReviewNotFound,
+    ReviewSyncError,
     approve,
     get_detail,
     list_queue,
     reject,
+    retry_sync,
 )
 from app.db.models import Faq, LowConfQuestion
+
+
+@pytest.fixture(autouse=True)
+def fake_kb_sync(monkeypatch):
+    """审核服务测试不连 Chroma/Ollama；同步由 Task 4 的 build 测试覆盖。"""
+    async def fake_build(*, session=None):
+        return {
+            "version": "test-version",
+            "chunks": 1,
+            "faq": 1,
+            "deleted": 0,
+        }
+
+    monkeypatch.setattr("app.core.review.build_kb", fake_build)
 
 
 async def _add(
@@ -217,3 +233,97 @@ async def test_reject_is_terminal(session):
 
     with pytest.raises(ReviewConflict):
         await approve(canonical.id, "答案", session=session)
+
+
+async def test_sync_failure_keeps_approved_and_faq_pending(
+    session, monkeypatch
+):
+    canonical = await _add(
+        session, question="价保规则是什么", normalized="价保规则是什么"
+    )
+
+    async def failing_build(*, session=None):
+        raise RuntimeError("chroma down")
+
+    monkeypatch.setattr("app.core.review.build_kb", failing_build)
+
+    with pytest.raises(ReviewSyncError):
+        await approve(canonical.id, "答案", session=session)
+
+    await session.refresh(canonical)
+    faq = (
+        await session.scalars(
+            select(Faq).where(Faq.source_question_id == canonical.id)
+        )
+    ).one()
+    assert canonical.status == "approved"
+    assert canonical.kb_ref is None
+    assert faq.sync_status == "pending"
+
+
+async def test_retry_sync_marks_written_back_after_success(
+    session, monkeypatch
+):
+    canonical = await _add(
+        session, question="价保规则是什么", normalized="价保规则是什么"
+    )
+
+    async def failing_build(*, session=None):
+        raise RuntimeError("chroma down")
+
+    monkeypatch.setattr("app.core.review.build_kb", failing_build)
+    with pytest.raises(ReviewSyncError):
+        await approve(canonical.id, "答案", session=session)
+
+    async def success_build(*, session):
+        faq = (
+            await session.scalars(
+                select(Faq).where(Faq.source_question_id == canonical.id)
+            )
+        ).one()
+        faq.sync_status = "synced"
+        faq.kb_version = "v2"
+        row = await session.get(LowConfQuestion, canonical.id)
+        row.status = "written_back"
+        row.kb_ref = f"faq-{faq.id}"
+        await session.commit()
+        return {
+            "version": "v2",
+            "chunks": 1,
+            "faq": 1,
+            "deleted": 0,
+        }
+
+    monkeypatch.setattr("app.core.review.build_kb", success_build)
+
+    result = await retry_sync(canonical.id, session=session)
+
+    assert result["status"] == "written_back"
+    assert result["kb_version"] == "v2"
+    await session.refresh(canonical)
+    assert canonical.status == "written_back"
+    assert canonical.kb_ref is not None
+    faq = (
+        await session.scalars(
+            select(Faq).where(Faq.source_question_id == canonical.id)
+        )
+    ).one()
+    assert faq.sync_status == "synced"
+    assert faq.kb_version == "v2"
+
+    # 已 written_back 再 retry 是幂等的，不再触发 build
+    async def boom(*, session=None):
+        raise AssertionError("written_back 不应再次同步")
+
+    monkeypatch.setattr("app.core.review.build_kb", boom)
+    again = await retry_sync(canonical.id, session=session)
+    assert again["status"] == "written_back"
+
+
+async def test_retry_sync_requires_approved(session):
+    canonical = await _add(
+        session, question="价保规则是什么", normalized="价保规则是什么"
+    )
+
+    with pytest.raises(ReviewConflict):
+        await retry_sync(canonical.id, session=session)

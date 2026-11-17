@@ -5,6 +5,7 @@
     uv run python scripts/review.py list --status approved
     uv run python scripts/review.py show 12
     uv run python scripts/review.py approve 12 --answer "可以水洗，注意阴干"
+    uv run python scripts/review.py retry 12
     uv run python scripts/review.py reject 12 --reason "活动已过期"
 
 输出统一为 JSON，方便复制到验收报告。
@@ -24,6 +25,7 @@ from app.core.review import (
     get_detail,
     list_queue,
     reject,
+    retry_sync,
 )
 
 
@@ -38,6 +40,8 @@ async def main(args: argparse.Namespace) -> int:
         _dump(await get_detail(args.review_id))
     elif args.command == "approve":
         _dump(await approve(args.review_id, args.answer))
+    elif args.command == "retry":
+        _dump(await retry_sync(args.review_id))
     elif args.command == "reject":
         _dump(await reject(args.review_id, args.reason))
     else:  # pragma: no cover - argparse 保证不会到这里
@@ -58,6 +62,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     approve_parser = sub.add_parser("approve", help="审核通过并写 FAQ")
     approve_parser.add_argument("review_id", type=int)
     approve_parser.add_argument("--answer", required=True, help="人工核准答案")
+
+    retry_parser = sub.add_parser("retry", help="重试 FAQ → KB 同步")
+    retry_parser.add_argument("review_id", type=int)
 
     reject_parser = sub.add_parser("reject", help="审核驳回")
     reject_parser.add_argument("review_id", type=int)

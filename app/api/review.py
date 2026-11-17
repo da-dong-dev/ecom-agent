@@ -8,6 +8,7 @@
 | GET | `/api/review/queue` |
 | GET | `/api/review/{id}` |
 | POST | `/api/review/{id}/approve` |
+| POST | `/api/review/{id}/retry` |
 | POST | `/api/review/{id}/reject` |
 """
 from typing import Annotated, Any
@@ -21,10 +22,12 @@ from app.core.review import (
     ReviewConflict,
     ReviewInvalid,
     ReviewNotFound,
+    ReviewSyncError,
     approve,
     get_detail,
     list_queue,
     reject,
+    retry_sync,
 )
 from app.db.session import get_session
 
@@ -60,6 +63,11 @@ def _raise_mapped(exc: Exception) -> None:
             status_code=422,
             detail={"code": "invalid_arg", "message": str(exc)},
         ) from exc
+    if isinstance(exc, ReviewSyncError):
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "sync_failed", "message": str(exc)},
+        ) from exc
     raise exc
 
 
@@ -94,7 +102,18 @@ async def review_approve(
 ) -> dict[str, Any]:
     try:
         return await approve(review_id, req.answer, session=session)
-    except (ReviewNotFound, ReviewConflict, ReviewInvalid) as exc:
+    except (ReviewNotFound, ReviewConflict, ReviewInvalid, ReviewSyncError) as exc:
+        _raise_mapped(exc)
+
+
+@router.post("/api/review/{review_id}/retry")
+async def review_retry(
+    review_id: int,
+    session: SessionDep,
+) -> dict[str, Any]:
+    try:
+        return await retry_sync(review_id, session=session)
+    except (ReviewNotFound, ReviewConflict, ReviewSyncError) as exc:
         _raise_mapped(exc)
 
 
