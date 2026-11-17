@@ -1,9 +1,9 @@
 # Ch08 前端验收
 
-> 日期：2026-11-16
+> 日期：2026-11-16 ～ 2026-11-17
 > 环境：macOS / Python 3.12 / Node 20.20.2 / 后端 8090 / 前端 5190 /
 > Chroma 8000 / Ollama 11434 可用。
-> 结论：**功能与回归通过；界面截图与录屏待补。**
+> 结论：**功能、回归、断流演练与界面截图通过；录屏待补。**
 
 ---
 
@@ -51,8 +51,8 @@ uv run ruff check .
 ```bash
 cd client
 npm run typecheck   # 通过
-npm test            # 11 files, 75 tests passed
-npm run build       # 通过；dist JS 808.27 kB（gzip 254.74 kB）
+npm test            # 11 files, 78 tests passed
+npm run build       # 通过；dist JS 870.53 kB（gzip 274.55 kB）
 ```
 
 构建仍有 antd 超过 500 kB 的提示；Ch08 不做 code split，留 P9 交付前评估。
@@ -61,7 +61,7 @@ npm run build       # 通过；dist JS 808.27 kB（gzip 254.74 kB）
 
 ## 3. 四个演示场景
 
-以下用 `POST /api/chat` 的真实 SSE 输出验证；界面截图/录屏待补。
+以下用 `POST /api/chat` 的真实 SSE 输出验证；界面截图见 §3.1，录屏待补。
 
 ### 场景 1：正常退费
 
@@ -129,6 +129,22 @@ npm run build       # 通过；dist JS 808.27 kB（gzip 254.74 kB）
 结论：park 提示、结构化 resume、跨轮槽位接回都正常；已提供的槽位不重复问，
 缺失槽位继续补齐。
 
+### 3.1 界面截图
+
+三张截图统一为 1440×900 CSS 像素 / 2× DPR（2880×1800）：
+
+| 截图 | 内容 |
+|---|---|
+| [主界面](../assets/ch08/01-main.png) | 欢迎页、示例问题、历史会话、输入框 |
+| [退款进度](../assets/ch08/02-refund-progress.png) | 已核对订单 → 已算出 ¥1249.00 → 等待确认；等待态用时钟，不转圈 |
+| [知识问答引用](../assets/ch08/03-knowledge-citation.png) | 回答引用 `[1]` 与来源浮层（`faq.md`） |
+
+![主界面](../assets/ch08/01-main.png)
+
+![退款进度](../assets/ch08/02-refund-progress.png)
+
+![知识问答引用](../assets/ch08/03-knowledge-citation.png)
+
 ---
 
 ## 4. 断流与回放演练
@@ -169,13 +185,27 @@ conversation 23: 2 messages
 
 ### 4.3 浏览器 DevTools 断流
 
-命令行重放已验证服务端不重复；**浏览器 DevTools Offline 演练与截图待人工补做**：
+命令行重放已验证服务端不重复；浏览器侧已完成人工演练并确认：
 
-1. 发一轮，DevTools → Network → Offline；
-2. 等 SSE 断开；
-3. 恢复网络，点“继续”；
-4. 确认无重复气泡、同一 `client_message_id`、回答不跳变；
-5. `delta` 后断开并刷新，确认历史恢复回答、金额、动作。
+- 日期：2026-11-17
+- 环境：macOS / Chrome / 后端 8090 / 前端 5190
+- 会话：57
+- 操作：
+  1. 发送「订单1002 不想要了」；
+  2. 生成过程中中断 SSE（停止后端）；
+  3. 恢复后端，点击「继续」；
+  4. 刷新页面。
+- 实际：
+  - 断流后出现错误提示和「继续」按钮；
+  - 点击后回答正常返回，只有一条助手气泡；
+  - 原用户消息只有一条，没有重复发送；
+  - 刷新后历史仍为一问一答，没有重复，按钮不再出现。
+- 数据库核对：
+  - user id=253，`client_message_id=0909333f-2e8f-4be6-859b-6ded9a676949`；
+  - assistant id=254，`reply_to_client_message_id=0909333f-2e8f-4be6-859b-6ded9a676949`，
+    `status=completed`；
+  - 重复用户消息 / 重复助手回复 / 孤儿助手回复均为 0。
+- 结论：通过。
 
 ---
 
@@ -187,8 +217,8 @@ conversation 23: 2 messages
 | 原请求仍在跑 | 继续会收到 429 `busy`；前端提示并冷却 5 秒，不自动重试 |
 | token 级流式 | 不做；`delta` 是整段一帧，进度靠 `progress` 帧 |
 | 工单 | 不做；转人工只给固定话术与动作，没有工单/坐席队列 |
-| 浏览器截图/录屏 | 本轮未生成，待补；不影响代码与 API 验收结论 |
-| 构建体积 | antd 导致 808.27 kB；P9 交付前再评估 code split |
+| 浏览器截图/录屏 | 三张界面截图已补（`docs/assets/ch08/`）；2 分钟录屏待补 |
+| 构建体积 | antd 导致 870.53 kB；P9 交付前再评估 code split |
 
 ---
 
@@ -202,7 +232,7 @@ conversation 23: 2 messages
 | P3 #7 schema 单向索引检查 | ✅ 已关闭 |
 | P3 #8 `ack` 丢失边界 | 保留；跨会话去重不在 Ch08 范围 |
 | P4 #8 数据飞轮 | 保留；见 Ch09 计划 |
-| P5 截图/录屏/README 定稿 | README 已更新；截图/录屏仍待补 |
+| P5 截图/录屏/README 定稿 | README 已更新；三张截图已补；录屏仍待补 |
 
 ---
 

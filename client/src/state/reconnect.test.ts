@@ -152,6 +152,26 @@ describe("buildHistoryState", () => {
     expect(state.handoffStarted).toBe(true);
   });
 
+  it("offers continue when the last message has no assistant reply", () => {
+    const state = buildHistoryState(
+      historyWith({
+        items: [
+          {
+            id: 34,
+            role: "user",
+            content: "订单1002 不想要了",
+            created_at: "2026-11-16T08:00:00",
+            client_message_id: "cm-1",
+          },
+        ],
+      }),
+    );
+
+    expect(state.interrupted).toBe(true);
+    expect(state.error).toBe("上次请求未完成，请点击继续");
+    expect(state.lastClientMessageId).toBe("cm-1");
+  });
+
   it("does not mix two conversations", () => {
     const first = buildHistoryState(historyWith());
     const second = buildHistoryState(

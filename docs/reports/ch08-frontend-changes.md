@@ -2037,3 +2037,143 @@ npm run typecheck   # 通过
 npm test            # 11 files, 75 tests passed
 npm run build       # 通过；dist JS 856.47 kB（gzip 270.03 kB）
 ```
+
+---
+
+## 12.32 · 小屏会话列表改为抽屉（2026-11-16）
+
+### 问题
+
+`<=1024px` 时三栏改成上下堆叠：
+- 历史会话占满整行、固定 168px；
+- 聊天区被压到下方；
+- 会话多时上半屏全是列表，主对话反而很小。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `App.tsx` | `Grid.useBreakpoint()`：`lg` 以下隐藏左侧栏，头部增加「会话」按钮，打开 antd `Drawer` |
+| `ConversationList` | 抽屉内复用同一组件；选中/新对话后自动关闭抽屉 |
+| `styles.css` | `.mobile-history-btn`、抽屉内会话卡高度适配 |
+
+### 小屏效果
+
+```text
+[品牌]                     [会话]
+┌──────────────────────────────┐
+│ 客服                         │
+│ [消息]                       │
+│                              │
+│ [输入框]                     │
+└──────────────────────────────┘
+```
+
+点「会话」→ 左侧抽屉滑出历史列表；选完关闭，聊天区保持占满屏幕。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 75 tests passed
+npm run build       # 通过；dist JS 870.30 kB（gzip 274.51 kB）
+```
+
+---
+
+## 12.33 · 刷新后恢复“继续”入口（2026-11-16）
+
+### 问题
+
+断流后刷新页面，历史只有 user 消息，没有 assistant：
+- 页面看起来停住；
+- 没有“继续/重试”按钮；
+- 用户只能重新输入。
+
+### 修改
+
+`reconnect.ts › buildHistoryState`：
+
+```ts
+const interrupted = history.items.at(-1)?.role === "user";
+```
+
+- 最后一条是 user → 设置 `interrupted=true`；
+- error 文案：「上次请求未完成，请点击继续」；
+- 复用历史里的 `lastClientMessageId`，点「继续」会：
+  - 后端已保存 → 回放；
+  - 没保存 → 同幂等键重跑；
+  - 还在跑 → 429 busy。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 76 tests passed
+npm run build       # 通过；dist JS 870.40 kB（gzip 274.55 kB）
+```
+
+---
+
+## 12.34 · 「等待用户」不再显示转圈（2026-11-17）
+
+### 问题
+
+`waiting_confirm` / `waiting_info` / `handoff` 的后端状态都是 `waiting`，
+但 `statusOf` 把 `waiting` 和 `running` 一起折叠成了 `process`：
+
+```ts
+if (item.status === "waiting" || item.status === "running") {
+  return "process";
+}
+```
+
+内联进度用 `process → LoadingOutlined`，所以「等待您确认」会一直转圈，
+看起来像系统还在处理，实际是在等用户操作。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `client/src/components/ProgressPanel.tsx` | `StepStatus` 增加 `waiting`；`waiting` 不再折叠成 `process`；Steps 用时钟图标覆盖 `process` 的当前态；内联进度沿用时钟 |
+| `client/src/styles.css` | `.progress-inline-step.waiting` 用琥珀色，区分「等用户」和「系统运行中」 |
+| `client/src/components/progress.test.tsx` | 新增 2 条测试：全量面板与内联进度都不能出现 `anticon-loading`，等待步骤要有时钟图标 |
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 11 files, 78 tests passed
+npm run build       # 通过；dist JS 870.53 kB（gzip 274.55 kB）
+```
+
+---
+
+## 12.35 · 三张交付截图（2026-11-17）
+
+### 产出
+
+| 文件 | 内容 |
+|---|---|
+| `docs/assets/ch08/01-main.png` | 新会话欢迎页、历史列表、示例问题 |
+| `docs/assets/ch08/02-refund-progress.png` | 退款三态进度；等待确认用时钟，不转圈 |
+| `docs/assets/ch08/03-knowledge-citation.png` | 知识问答引用 `[1]` 与来源浮层 |
+
+### 采集方式
+
+- Playwright + Chromium；
+- 统一 1440×900 CSS 像素、2× DPR（2880×1800）；
+- 分别打开 `?c=57`（退款）与 `?c=58`（知识问答）；
+- 引用截图用 `hover` 打开 Popover，避免 `click` 把 `hover + click` 触发成开关两次。
+
+### 验证
+
+```bash
+ls -lh docs/assets/ch08/
+# 01-main.png 667K
+# 02-refund-progress.png 713K
+# 03-knowledge-citation.png 923K
+```

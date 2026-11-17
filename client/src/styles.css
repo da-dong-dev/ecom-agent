@@ -75,6 +75,10 @@ body::after {
   padding: 2px 4px;
 }
 
+.mobile-history-btn {
+  border-radius: 999px;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -571,6 +575,11 @@ body::after {
   font-weight: 600;
 }
 
+.progress-inline-step.waiting {
+  color: #b45309;
+  font-weight: 600;
+}
+
 .progress-inline-sep {
   color: #cbd5e1;
   font-size: 10px;
@@ -895,7 +904,11 @@ body::after {
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 991px) {
+  .mobile-conversation-drawer .conversation-card {
+    height: calc(100dvh - 88px);
+  }
+
   .app-shell {
     height: auto;
     min-height: 100dvh;

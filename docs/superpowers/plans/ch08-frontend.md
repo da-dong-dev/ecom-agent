@@ -885,8 +885,8 @@ type TurnState = {
 
 ## Task 12: 测试、四场景验收、文档
 
-> 状态：✅ 功能 / 回归 / 四场景 API 验收完成（2026-11-16）；
-> 界面截图与录屏待补。结果见 [ch08-acceptance.md](../../reports/ch08-acceptance.md)。
+> 状态：✅ 功能 / 回归 / 四场景 API / 断流浏览器演练完成（2026-11-17）；
+> 三张界面截图已补，录屏待补。结果见 [ch08-acceptance.md](../../reports/ch08-acceptance.md)。
 
 **目的：** 把 Ch08 变成可演示、可复现的交付。
 
@@ -1013,7 +1013,7 @@ Task 0（spike）
 - [ ] 后端：`uv run pytest -q` 全绿；`ruff check .` 通过。
 - [ ] 前端：`npm run typecheck` / `npm run test` / `npm run build` 通过。
 - [ ] 四个演示场景在界面上走通，有截图/录屏。
-- [ ] 断流演练通过：同一 `client_message_id` 只有一条 user + 一条 assistant。
+- [x] 断流演练通过：同一 `client_message_id` 只有一条 user + 一条 assistant。
 - [ ] 刷新后消息、引用、动作、金额能恢复。
 - [ ] `docs/reports/ch08-acceptance.md` / `ch08-frontend-changes.md` 完成。
 - [ ] `README.md` 有前后端启动与迁移命令。

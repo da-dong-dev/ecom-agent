@@ -51,6 +51,13 @@ npm run dev
 
 打开 <http://127.0.0.1:5190>。Vite 已把 `/api` 代理到 `127.0.0.1:8090`。
 
+## 界面
+
+<img src="docs/assets/ch08/01-main.png" width="720" alt="主界面" />
+
+退款进度与知识问答引用见
+[ch08-acceptance.md §3.1](docs/reports/ch08-acceptance.md#31-界面截图)。
+
 ## 验证
 
 ```bash
@@ -59,7 +66,7 @@ uv run ruff check .       # 通过
 
 cd client
 npm run typecheck         # 通过
-npm test                  # 11 files, 75 tests passed
+npm test                  # 11 files, 78 tests passed
 npm run build             # 通过
 ```
 
@@ -76,7 +83,7 @@ npm run build             # 通过
 | Ch05 | 多轮：窗口 / 摘要 / park / ReAct | ✅ |
 | Ch06 | 安全：注入防御 / 输出检查 | ✅ |
 | Ch07 | 评测：44 条评测集 / 阈值 / 退款困难组 | ✅ |
-| Ch08 | 前端：聊天 + 进度 + 动作 + 历史 + 断流 | ✅（截图/录屏待补） |
+| Ch08 | 前端：聊天 + 进度 + 动作 + 历史 + 断流 | ✅（三张截图已补；录屏待补） |
 | Ch09 | 数据飞轮（可选） | 📋 计划 |
 
 ## 架构

@@ -27,6 +27,41 @@ describe("ProgressPanel", () => {
     expect(screen.getByText("等待您确认")).toBeTruthy();
   });
 
+  it("uses a clock instead of a spinner while waiting for confirmation", () => {
+    const { container } = render(
+      <ProgressPanel
+        route="rules"
+        inFlight={false}
+        progress={[
+          { stage: "checking_order", status: "done" },
+          { stage: "amount_ready", status: "done", amount: 124900 },
+          { stage: "waiting_confirm", status: "waiting", amount: 124900 },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector(".anticon-clock-circle")).toBeTruthy();
+    expect(container.querySelector(".anticon-loading")).toBeNull();
+  });
+
+  it("marks the inline waiting step with a clock", () => {
+    const { container } = render(
+      <ProgressPanel
+        route="rules"
+        embedded
+        inFlight={false}
+        progress={[
+          { stage: "checking_order", status: "done" },
+          { stage: "amount_ready", status: "done", amount: 124900 },
+          { stage: "waiting_confirm", status: "waiting", amount: 124900 },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector(".progress-inline-step.waiting")).toBeTruthy();
+    expect(container.querySelector(".anticon-loading")).toBeNull();
+  });
+
   it("shows waiting_info instead of amount", () => {
     render(
       <ProgressPanel

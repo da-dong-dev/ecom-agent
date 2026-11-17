@@ -17,7 +17,7 @@ type Props = {
   embedded?: boolean;
 };
 
-type StepStatus = "wait" | "process" | "finish" | "error";
+type StepStatus = "wait" | "waiting" | "process" | "finish" | "error";
 
 type PanelStep = {
   key: string;
@@ -43,7 +43,10 @@ function statusOf(
   if (item.status === "done") {
     return "finish";
   }
-  if (item.status === "waiting" || item.status === "running") {
+  if (item.status === "waiting") {
+    return "waiting";
+  }
+  if (item.status === "running") {
     return "process";
   }
   return "error";
@@ -312,11 +315,17 @@ export function ProgressPanel({
   }
 
   const current = steps.findIndex(
-    (step) => step.status === "process" || step.status === "error",
+    (step) =>
+      step.status === "process" ||
+      step.status === "waiting" ||
+      step.status === "error",
   );
   const currentIndex = current >= 0 ? current : steps.length;
   const active = steps.find(
-    (step) => step.status === "process" || step.status === "error",
+    (step) =>
+      step.status === "process" ||
+      step.status === "waiting" ||
+      step.status === "error",
   );
 
   return (
@@ -343,7 +352,11 @@ export function ProgressPanel({
           current={currentIndex}
           items={steps.map((step) => ({
             title: step.title,
-            status: step.status,
+            // antd Steps 没有 waiting；用 process 保留蓝色当前态，再用时钟
+            // 图标表达“等用户操作”，避免和真正运行中的转圈混淆。
+            status: step.status === "waiting" ? "process" : step.status,
+            icon:
+              step.status === "waiting" ? <ClockCircleOutlined /> : undefined,
           }))}
         />
       )}

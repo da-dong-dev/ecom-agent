@@ -201,6 +201,9 @@ export function buildHistoryState(history: ConversationHistory): TurnState {
   const userMeta = asRecord(lastUser?.meta);
   const selected = userMeta.selected_action;
   const selectedAction = isAssistantAction(selected) ? selected : null;
+  const lastItem = history.items[history.items.length - 1];
+  const interrupted = lastItem?.role === "user";
+
   const handoffStarted = history.items.some((message) => {
     if (message.role !== "assistant") {
       return false;
@@ -227,6 +230,8 @@ export function buildHistoryState(history: ConversationHistory): TurnState {
     messages,
     route,
     progress: progressFromAssistant(route, assistantMeta),
+    interrupted,
+    error: interrupted ? "上次请求未完成，请点击继续" : null,
     handoffStarted,
     lastClientMessageId: lastUser?.client_message_id ?? null,
     lastSelectedAction: selectedAction,

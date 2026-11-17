@@ -1,4 +1,6 @@
-import { Typography } from "antd";
+import { HistoryOutlined } from "@ant-design/icons";
+import { Button, Drawer, Grid, Typography } from "antd";
+import { useState } from "react";
 
 import { ChatWindow } from "./components/ChatWindow";
 import { Composer } from "./components/Composer";
@@ -16,6 +18,9 @@ const SUGGESTIONS = [
 ];
 
 export default function App() {
+  const screens = Grid.useBreakpoint();
+  const compact = screens.lg === false;
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const {
     state,
     conversations,
@@ -45,21 +50,32 @@ export default function App() {
             </Typography.Text>
           </div>
         </div>
+        {compact ? (
+          <Button
+            className="mobile-history-btn"
+            icon={<HistoryOutlined />}
+            onClick={() => setDrawerOpen(true)}
+          >
+            会话
+          </Button>
+        ) : null}
       </header>
 
       <div className="workspace">
-        <aside className="conversation-panel">
-          <ConversationList
-            items={conversations}
-            activeId={state.conversationId}
-            loading={conversationLoading}
-            onSelect={handleSelectConversation}
-            onNew={handleNewConversation}
-            onDelete={(id) => {
-              void handleDeleteConversation(id);
-            }}
-          />
-        </aside>
+        {!compact ? (
+          <aside className="conversation-panel">
+            <ConversationList
+              items={conversations}
+              activeId={state.conversationId}
+              loading={conversationLoading}
+              onSelect={handleSelectConversation}
+              onNew={handleNewConversation}
+              onDelete={(id) => {
+                void handleDeleteConversation(id);
+              }}
+            />
+          </aside>
+        ) : null}
 
         <section className="chat-column">
           <ChatWindow
@@ -102,8 +118,34 @@ export default function App() {
             onStop={handleStop}
           />
         </section>
-
       </div>
+
+      <Drawer
+        className="mobile-conversation-drawer"
+        placement="left"
+        width={320}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        closable
+        styles={{ body: { padding: 12 } }}
+      >
+        <ConversationList
+          items={conversations}
+          activeId={state.conversationId}
+          loading={conversationLoading}
+          onSelect={(id) => {
+            setDrawerOpen(false);
+            handleSelectConversation(id);
+          }}
+          onNew={() => {
+            setDrawerOpen(false);
+            handleNewConversation();
+          }}
+          onDelete={(id) => {
+            void handleDeleteConversation(id);
+          }}
+        />
+      </Drawer>
     </main>
   );
 }

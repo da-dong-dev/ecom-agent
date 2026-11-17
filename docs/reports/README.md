@@ -6,7 +6,7 @@
 > 找文件靠这张“按目的找”的表，不靠目录层级。
 
 **当前进度**：Ch01–Ch08 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)；
-Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。界面截图/录屏待补；Ch09 数据飞轮为可选计划。
+Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已补，录屏待补；Ch09 数据飞轮为可选计划。
 
 > **第一次读 Ch07 / 想重新理解全章**：先看
 > [ch07-overview.md](./ch07-overview.md)——它把“为什么做、每个任务做什么、
@@ -78,7 +78,7 @@ Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。界面截图/录屏待�
 | [ch05-acceptance.md](./ch05-acceptance.md) | 多轮与 ReAct：六条场景、park、指代、延迟 | ✅ |
 | [ch06-acceptance.md](./ch06-acceptance.md) | 安全：越权、404、注入、输出检查、日志脱敏 | ✅ |
 | [ch07-acceptance.md](./ch07-acceptance.md) | 评测验收：清单、指标、边界、复现命令 | ✅ |
-| [ch08-acceptance.md](./ch08-acceptance.md) | 前端验收：四场景、断流、历史、回归、边界 | ✅（截图/录屏待补） |
+| [ch08-acceptance.md](./ch08-acceptance.md) | 前端验收：四场景、断流、历史、回归、截图、边界 | ✅（三张截图已补；录屏待补） |
 
 ### 3.3 端到端评测
 
