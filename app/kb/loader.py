@@ -121,3 +121,21 @@ def load_chunks() -> list[dict]:
     for path in sorted(REGULATION_DIR.glob("*.md")):
         chunks.extend(_regulation_chunks(path))
     return sorted(chunks, key=lambda c: c["id"])
+
+
+def faq_chunks(rows: list[dict]) -> list[dict]:
+    """把已审核的 FAQ 行转成和文档同构的检索 chunk。
+
+    输入行至少含 `id / question / answer`；id 用 `faq-{id}`，
+    这样 build_kb 的 upsert/删除逻辑不需要区分来源。
+    """
+    return [
+        {
+            "id": f"faq-{row['id']}",
+            "text": f"{row['question']}\n{row['answer']}",
+            "source": "faq",
+            "section": row["question"],
+            "kind": "faq",
+        }
+        for row in rows
+    ]

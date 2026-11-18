@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.errors import NotFound
-from app.db.models import Conversation, utcnow
+from app.db.models import Conversation, Message, utcnow
 from app.db.session import session_scope
 
 
@@ -33,6 +33,22 @@ async def get_conversation(
         if row is None or row.user_id != user_id or row.deleted_at is not None:
             raise NotFound("conversation not found")
         return row
+
+
+async def soft_delete_conversation(
+    cid: int, *, user_id: str, session: AsyncSession | None = None
+) -> None:
+    """软删会话：只改 deleted_at，保留消息用于审计/回放。
+
+    不存在、不属于本人、已软删 —— 一律 NotFound（S2）。
+    """
+    async with session_scope(session) as s:
+        row = await s.get(Conversation, cid)
+        if row is None or row.user_id != user_id or row.deleted_at is not None:
+            raise NotFound("conversation not found")
+        now = utcnow()
+        row.deleted_at = now
+        row.updated_at = now
 
 
 async def set_flow(
@@ -93,6 +109,60 @@ async def list_conversations(*, user_id: str, session: AsyncSession | None = Non
             .order_by(Conversation.updated_at.desc())
         )
         return list((await s.scalars(stmt)).all())
+
+
+async def list_conversation_summaries(
+    *,
+    user_id: str,
+    limit: int = 20,
+    session: AsyncSession | None = None,
+) -> list[dict[str, Any]]:
+    """前端会话列表的只读视图。
+
+    标题取“第一条非空的用户消息”，截断 30 字；没有则“新会话”。
+    不返回 summary / draft：前端只需要标题、更新时间和未完成流程标记。
+    """
+    async with session_scope(session) as s:
+        first_user_content = (
+            select(Message.content)
+            .where(
+                Message.conversation_id == Conversation.id,
+                Message.role == "user",
+                Message.content.is_not(None),
+                Message.content != "",
+            )
+            .order_by(Message.id.asc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(
+                Conversation.id,
+                Conversation.created_at,
+                Conversation.updated_at,
+                Conversation.active_flow,
+                Conversation.pending_question,
+                first_user_content.label("title"),
+            )
+            .where(
+                Conversation.user_id == user_id,
+                Conversation.deleted_at.is_(None),
+            )
+            .order_by(Conversation.updated_at.desc())
+            .limit(limit)
+        )
+        rows = (await s.execute(stmt)).all()
+        return [
+            {
+                "id": row.id,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "title": ((row.title or "新会话").strip()[:30] or "新会话"),
+                "active_flow": row.active_flow,
+                "pending_question": row.pending_question,
+            }
+            for row in rows
+        ]
 
 
 async def _load(s: AsyncSession, cid: int) -> Conversation:

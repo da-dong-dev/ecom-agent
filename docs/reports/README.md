@@ -5,7 +5,9 @@
 > **文件保持平铺**：改名/移动会打断 80 多处引用（含代码 docstring 与脚本），
 > 找文件靠这张“按目的找”的表，不靠目录层级。
 
-**当前进度**：Ch01–Ch07 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)）；下一步 Ch08 前端。
+**当前进度**：Ch01–Ch08 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)；
+Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已补，录屏待补；
+Ch09 离线数据飞轮已完成闭环（Task 0–8，含审核 UI）。
 
 > **第一次读 Ch07 / 想重新理解全章**：先看
 > [ch07-overview.md](./ch07-overview.md)——它把“为什么做、每个任务做什么、
@@ -13,7 +15,15 @@
 >
 > **想复习整个项目 / 准备面试**：看
 > [project-review.md](./project-review.md)——主线图、章节四格卡、决策地图、
-> 三个故事和自测题。当前已完成 Ch02 / Ch03，其余章节待补。
+> 三个故事和自测题。当前已完成 Ch02 / Ch03 / Ch05，其余章节待补。
+>
+> **新窗口继续开发**：Ch08 已验收，Ch09 离线数据飞轮已闭环；
+> 设计见 [ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md)，
+> 计划见 [ch09-flywheel.md](../superpowers/plans/ch09-flywheel.md)，
+> 验收见 [ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md)。
+>
+> **想找“还有什么没做”**：看 [todo.md](./todo.md)——按 P0 阻塞项、产品缺口、
+> 评测边界、技术债、触发后优化分类。
 
 ---
 
@@ -23,6 +33,7 @@
 |---|---|---|
 | 复习整个项目 / 准备面试 | [project-review.md](./project-review.md) | [ch07-overview.md](./ch07-overview.md) |
 | 整体理解 Ch07 | [ch07-overview.md](./ch07-overview.md) | [ch07-acceptance.md](./ch07-acceptance.md) |
+| 看 Ch08 前端验收 | [ch08-acceptance.md](./ch08-acceptance.md) | [ch08-frontend-changes.md](./ch08-frontend-changes.md) |
 | 看当前质量基线 | [run-03.md](./run-03.md) | [judge-variance.md](./judge-variance.md)（判断变化是不是噪声） |
 | 判断一次指标变化可不可信 | [judge-variance.md](./judge-variance.md) | [run-02.md](./run-02.md) |
 | 调证据阈值 / 语义闸 | [gate-thresholds.md](./gate-thresholds.md) | [gate-eval-semantic.md](./gate-eval-semantic.md) |
@@ -56,7 +67,9 @@
 | [ch04-data-exit-changes.md](./ch04-data-exit-changes.md) | B 出口：订单 / 物流 / 库存查询 | ✅ |
 | [ch05-multi-turn-changes.md](./ch05-multi-turn-changes.md) | 多轮：消息落库、锚点、窗口、指代、park、ReAct | ✅ |
 | [ch06-security-changes.md](./ch06-security-changes.md) | 安全：越权、404、Prompt 四区、输出检查、日志 | ✅ |
-| [ch07-eval-changes.md](./ch07-eval-changes.md) | 评测：44 条评测集、评测门面、EvalFlow、阈值与传导 | 🚧 |
+| [ch07-eval-changes.md](./ch07-eval-changes.md) | 评测：44 条评测集、评测门面、EvalFlow、阈值与传导 | ✅ |
+| [ch08-frontend-changes.md](./ch08-frontend-changes.md) | 前端：SSE、进度、动作、历史、断流、验收 | ✅ |
+| [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 数据飞轮（离线模拟）：落池、标准化、审核、写回、评测、审核 UI | ✅ 闭环 |
 
 ### 3.2 验收报告（一章做完时写）
 
@@ -68,6 +81,8 @@
 | [ch05-acceptance.md](./ch05-acceptance.md) | 多轮与 ReAct：六条场景、park、指代、延迟 | ✅ |
 | [ch06-acceptance.md](./ch06-acceptance.md) | 安全：越权、404、注入、输出检查、日志脱敏 | ✅ |
 | [ch07-acceptance.md](./ch07-acceptance.md) | 评测验收：清单、指标、边界、复现命令 | ✅ |
+| [ch08-acceptance.md](./ch08-acceptance.md) | 前端验收：四场景、断流、历史、回归、截图、边界 | ✅（三张截图已补；录屏待补） |
+| [ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md) | 离线飞轮：补库前后 hit@3/citation/拒答率、44 条回归、边界 | ✅ |
 
 ### 3.3 端到端评测
 
@@ -139,6 +154,10 @@
 | [../interview/ch03-refund.md](../interview/ch03-refund.md) | Ch03：模型判定 + 代码复算、评测设计、踩坑故事 |
 | [../interview/ch04-data-exit.md](../interview/ch04-data-exit.md) | Ch04：零模型调用、固定链、越权防枚举、模板回答 |
 | [../interview/ch05-multi-turn.md](../interview/ch05-multi-turn.md) | Ch05：DB 三字段恢复、窗口、park、锁、只读 ReAct |
+| [../interview/ch06-security.md](../interview/ch06-security.md) | Ch06：归属、404、Prompt 四区、输出检查、日志 |
+| [../interview/ch07-eval.md](../interview/ch07-eval.md) | Ch07：44 条评测集、双回路、阈值、退款困难组、judge 方差 |
+| [../interview/ch08-frontend.md](../interview/ch08-frontend.md) | Ch08：SSE 帧 reducer、进度/动作、历史恢复、C2-lite 断流 |
+| [../interview/ch09-flywheel.md](../interview/ch09-flywheel.md) | Ch09：标准化/查重、审核、FAQ 写回、补库前后评测 |
 | [../interview/database-qa.md](../interview/database-qa.md) | 数据库问答：索引 / 事务 / WAL / async ORM |
 | [../interview/self-test.md](../interview/self-test.md) | 自测方法：抽题表、评分标准、模拟面试与演示脚本 |
 

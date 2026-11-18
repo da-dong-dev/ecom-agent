@@ -98,14 +98,20 @@ async def save_assistant_message(
     *,
     meta: dict[str, Any] | None = None,
     status: str = "completed",
+    reply_to_client_message_id: str | None = None,
     session: AsyncSession | None = None,
 ) -> int:
-    """落助手消息，返回消息 id。失败时用 `status="error"` 记一条，避免用户消息悬空。"""
+    """落助手消息，返回消息 id。失败时用 `status="error"` 记一条，避免用户消息悬空。
+
+    `reply_to_client_message_id` 由 API 传入：只有成功回答才写，
+    错误消息保持 NULL，重试时不会回放错误结果。
+    """
     return await append_message(
         cid,
         "assistant",
         text or None,
         status=status,
+        reply_to_client_message_id=reply_to_client_message_id,
         meta=meta,
         session=session,
     )

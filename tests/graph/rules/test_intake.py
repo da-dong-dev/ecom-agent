@@ -87,6 +87,13 @@ async def test_intake_writes_order_id():
     result = await intake({"raw_query": "订单1001我要退款"})
     assert result["order_id"] == "1001"
 
+async def test_intake_does_not_overwrite_existing_order_with_reason_text():
+    """恢复轮补原因时，原因文本里的数字不能覆盖已选订单。"""
+    result = await intake({"raw_query": "111111", "order_id": "1003"})
+    assert result == {}
+
+
+
 
 async def test_intake_clears_pending_question():
     """用户已经补充了订单号，上一轮的追问标记要清掉。"""
@@ -160,6 +167,11 @@ async def test_asks_for_reason_when_order_is_known(orders):
         {"user_id": "u1", "order_id": "1002", "raw_query": "退货"}
     )
     assert result["pending_question"] == "reason_code"
+    assert [a["reason_code"] for a in result["actions"]] == [
+        "quality",
+        "no_reason",
+        "other",
+    ]
 
 
 async def test_returns_nothing_when_all_fields_are_present(orders):

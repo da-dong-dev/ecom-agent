@@ -1,7 +1,7 @@
 # 面试自测方法
 
 > 用途：不靠"读一遍文档"，靠**闭卷输出 + 对照 + 代码定位**发现漏洞。
-> 配套：[ch01](./ch01-data-foundation.md) / [ch02](./ch02-retrieval-skeleton.md) / [ch03](./ch03-refund.md) / [ch04](./ch04-data-exit.md) / [ch05](./ch05-multi-turn.md)
+> 配套：[ch01](./ch01-data-foundation.md) / [ch02](./ch02-retrieval-skeleton.md) / [ch03](./ch03-refund.md) / [ch04](./ch04-data-exit.md) / [ch05](./ch05-multi-turn.md) / [ch06](./ch06-security.md) / [ch07](./ch07-eval.md) / [ch08](./ch08-frontend.md) / [ch09](./ch09-flywheel.md)
 
 ---
 
@@ -127,6 +127,16 @@ uv run python scripts/try.py chat "我要退款，尺寸不合适"
 ```
 
 **多轮演示只看三件事**：`resume_flow` 提示有没有出现、第二轮有没有重复问、`route.resumed` 是否为 true。
+
+### 如果面试官要看界面（Ch08）
+
+1. 打开 5190，新会话问「订单1002 不想要了」→ 看三态进度和金额；
+2. 问「退货政策是什么」→ 点 `[1]` 看来源浮层；
+3. 输入「我要投诉你们的客服」→ 看转人工话术和动作；
+4. 生成中停后端 → 看「继续」→ 恢复后点继续；
+5. 刷新页面 → 确认历史仍是一问一答，没有重复。
+
+**界面演示只说三件事**：走了哪个出口、为什么、结果对不对。不要边点边翻代码。
 
 **演示时只说三件事**：这条走了哪个出口、为什么、结果对不对。
 不要边跑边翻代码。

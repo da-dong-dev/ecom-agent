@@ -18,7 +18,7 @@
 - **技术选型定死**：T1 LangGraph、T2 Chroma、T3 BGE-M3 本地、T4 rank_bm25+jieba、T5 openai SDK。走不通停下问。
 - **占位三原则**：明确告知 / 统一节点 / 契约先定。**占位绝不返回金额。**
 - **本章不做 rerank、不做指代消解**（透传）、不做多轮窗口。
-- **本地环境（2026-10-29 实测）**：Chroma 1.0.0 跑在 Docker `:8000`（baby-ai 依赖，不动），Ollama `bge-m3` 1024 维可用。**本项目 FastAPI 用 8080**；Chroma 集合名 `ecom_kb` 且必须显式 `space=cosine`。详见 [本地环境现状](../../reports/local-env.md)。
+- **本地环境（2026-10-29 实测）**：Chroma 1.0.0 跑在 Docker `:8000`（baby-ai 依赖，不动），Ollama `bge-m3` 1024 维可用。**本项目 FastAPI 用 8090**；Chroma 集合名 `ecom_kb` 且必须显式 `space=cosine`。详见 [本地环境现状](../../reports/local-env.md)。
 - 涉及 LangGraph API，动手前用 Context7 核实当前版本接口（**版本对不上是返工重灾区**）。
 - 不可单测的产出（prompt 质量）用"10 题评测 + 人工看 3 条"代替 TDD。
 - 每个 task 完成即 commit。

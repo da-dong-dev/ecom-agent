@@ -95,8 +95,8 @@ async def classify_intent(state: ConversationState) -> dict:
     `route` 必须在这里写进 state——条件边函数没有写权限。它与 `route_by_intent`
     查同一张 `INTENT_TO_ROUTE`，所以 state 里的 route 和图实际走的分支不会不一致。
 
-    `multi_intent` **暂不写进 state**：本章没有消费者（单轮、无追问），
-    等 Ch05 做多意图澄清时再落 state + `pending_question`。
+    `multi_intent` 写入 state；为 true 时先把 route 设为 fallback，
+    交给 E 出口做一次澄清，不按主诉求继续往下跑。
     """
     # 槽位命中后由 API 写 resume_route：不调模型，直接回原出口
     resume = state.get("resume_route")
@@ -104,15 +104,26 @@ async def classify_intent(state: ConversationState) -> dict:
         return {
             "intent": state.get("intent"),
             "intent_confidence": 1.0,
+            "multi_intent": False,
             "route": resume,
             "resumed": True,
         }
 
     query = state.get("resolved_query") or state.get("raw_query", "")
-    intent, confidence, _multi_intent = await classify(query)
+    intent, confidence, multi_intent = await classify(query)
+    if multi_intent:
+        # 先别急着按主诉求往下跑：用户一句话里还有别的诉求，
+        # 直接问“哪一单”会让用户以为被忽略了。先澄清顺序。
+        return {
+            "intent": intent,
+            "intent_confidence": confidence,
+            "multi_intent": True,
+            "route": FALLBACK_ROUTE,
+        }
     return {
         "intent": intent,
         "intent_confidence": confidence,
+        "multi_intent": False,
         "route": INTENT_TO_ROUTE.get(intent, FALLBACK_ROUTE),
     }
 
@@ -144,6 +155,12 @@ async def human_exit(state: ConversationState) -> dict:
 # 的混合句，会靠 `_has_business_intent` 排除脚本、走兜底——比误判成"致谢"好。
 
 _SOCIAL_WORDS = ("在吗", "在不在", "你好", "您好", "hi", "hello", "有人吗")
+# 身份/能力类问题：不是“没听懂”，而是用户想确认“你是谁、能做什么”。
+# 不能只靠 _SOCIAL_WORDS，否则「你是谁」会掉进 UNKNOWN_REPLY + 转人工。
+_SELF_INTRO_WORDS = (
+    "你是谁", "你叫什么", "你是什么", "你是机器人", "你是ai",
+    "你能做什么", "你能干什么", "你会什么", "介绍一下你",
+)
 _THANKS_WORDS = ("谢谢", "多谢", "谢啦", "感谢", "好的", "好滴", "嗯", "收到", "辛苦了")
 # 出现这些词说明用户在问业务，不能按寒暄/致谢处理
 _BUSINESS_WORDS = (
@@ -153,6 +170,14 @@ _BUSINESS_WORDS = (
 
 SOCIAL_REPLY = "在的，请问有什么可以帮您？"
 THANKS_REPLY = "不客气，还有其他可以帮您的吗？"
+MULTI_INTENT_REPLY = (
+    "您这句话里提到了不止一件事，想先处理哪一件？"
+    "可以告诉我是退款、查订单/物流，还是政策问题。"
+)
+SELF_INTRO_REPLY = (
+    "我是电商售后智能客服，可以帮您查订单、算退款，也能解释退货、"
+    "物流和优惠券规则。您可以直接描述问题，复杂情况可以点「转人工」。"
+)
 UNKNOWN_REPLY = "抱歉，这个问题我暂时没能理解。您可以换个说法，或者点「转人工」由客服跟进。"
 
 
@@ -172,7 +197,12 @@ async def fallback_exit(state: ConversationState) -> dict:
     """
     query = (state.get("resolved_query") or state.get("raw_query") or "").strip()
 
+    if state.get("multi_intent"):
+        return {"answer": MULTI_INTENT_REPLY, "is_placeholder": False}
+
     if query and not _has_business_intent(query):
+        if _matches(query.lower(), _SELF_INTRO_WORDS):
+            return {"answer": SELF_INTRO_REPLY, "is_placeholder": False}
         if _matches(query, _SOCIAL_WORDS):
             return {"answer": SOCIAL_REPLY, "is_placeholder": False}
         if _matches(query, _THANKS_WORDS):

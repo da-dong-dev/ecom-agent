@@ -216,6 +216,32 @@ async def test_divergence_goes_human():
     assert "code=not_intact" in result["compliance_violation"]
 
 
+async def test_divergence_records_rule_conflict(monkeypatch):
+    recorded: dict = {}
+
+    async def fake_record(**kwargs):
+        recorded.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(rules_exit, "record_low_conf", fake_record)
+
+    result = await compliance(
+        state(
+            raw_query="订单1001 能退吗",
+            conversation_id=7,
+            refund_draft=draft(reason_code="no_reason", condition_ok=False),
+            refund_judgement=judgement(eligible=True, reason_code="ok"),
+        )
+    )
+
+    assert result["compliance_violation"].startswith("rule_divergence:")
+    assert recorded["source"] == "rule_conflict"
+    assert recorded["hits"] is None
+    assert recorded["conversation_id"] == 7
+    assert recorded["question"] == "订单1001 能退吗"
+    assert recorded["reason"].startswith("rule_conflict:rule_divergence:")
+
+
 async def test_quality_with_use_trace_does_not_diverge():
     """质量问题 + 用过：代码返回 None（分不清责任），不否决模型。
 

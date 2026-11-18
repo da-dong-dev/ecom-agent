@@ -115,7 +115,7 @@ D 的建单（P4-3）仍待做。
 | P5-8 | 演示场景 4 验收 | L8 | 手工记录 | 离开再回来完整走通 | ✅ |
 | P5-9 | **E 出口只读 ReAct**：harness（工具注册 / 循环 / 步数封顶 / trace）+ 兜底接入 | 架构取舍讨论 | `app/core/react.py`、`app/graph/fallback_agent.py` | 规则未命中的长尾能调工具作答；写操作不在工具集；超 4 步收敛到脚本 | ✅ |
 | P5-10 | *(可选)* **B2**：B 出口参数失败分支接 ReAct | 同 P5-9 | 复用 `app/core/react.py` | 仅当评测显示「参数抽取失败 / 需澄清」占比 > 20% 时做 | ⏳ |
-| P5-11 | **多意图澄清**：`multi_intent=true` 时反问「您想先处理哪一件？」，`pending_question` 记住选择，下一轮接回 | M4、M6 | `app/graph/state.py`、`app/graph/nodes.py` | 双诉求输入 → 反问 → 下一轮「先查物流」能接回 data 出口 | ⏳ |
+| P5-11 | **多意图澄清**：`multi_intent=true` 时反问「您想先处理哪一件？」，`pending_question` 记住选择，下一轮接回 | M4、M6 | `app/graph/state.py`、`app/graph/nodes.py` | 双诉求输入 → 先反问澄清（最小版，不记 pending） | ⚠️ |
 | P5-12 | **checkpointer + `interrupt`**：图内暂停/恢复，替代 Ch03 的 DB 版追问。**触发条件**：需要"同一轮内原地续跑、不重跑已完成节点"，或人工审核要插在流程中间 | M5 | `app/graph/build.py`、`app/graph/rules_exit.py` | `need_info` 用 `interrupt` 挂起；同一 `thread_id` 恢复后从断点继续（不重跑 `intake`/`extract`）；`SqliteSaver` 落库，进程重启可恢复 | ⏳ |
 | P5-13 | **指代消解**：每轮改写 + 三个短路；失败回落原句 | M3 | `app/core/coref.py` | 「那单呢」能补全；无历史/含实体/resume 轮不调模型 | ✅ |
 | P5-14 | *(后续)* **ReAct 槽位解析**：`slot_fill` 失败时复用只读 ReAct；加 `list_user_orders` / `search_products`；`ReactResult` 回填 `resolved_slot/value` | M6、P5-9 | `app/core/react.py`、`app/core/slot_fill.py`、商品目录 | 「第一单」「那个推车」能接回流程；多命中列候选，不猜 | ⏳ |
@@ -173,16 +173,23 @@ D 的建单（P4-3）仍待做。
 
 ---
 
-## P8 · 前端（3 天）
+## P8 · 前端（8–11 人日）
+
+> **执行说明（2026-11-14）**：Ch08 的实际范围比原 P8 大，已拆成
+> [ch08-frontend.md](./ch08-frontend.md) 的 Task 0–12：
+> **后端契约 Task 0–6 + 前端 Task 7–11 + 验收 Task 12**。
+> 原 P8-1…P8-6 对应前端/验收部分；工作量重估见
+> [ch08-frontend-design.md](../specs/ch08-frontend-design.md) §10。
 
 | # | 任务 | 依据 | 产出 | 验收 | 状态 |
 |---|---|---|---|---|---|
-| P8-1 | 前端脚手架（Vite + React） | L4 | `client/` | 起得来 | ⏳ |
-| P8-2 | 聊天 + SSE 流式 | L4 | — | 流式渲染正常 | ⏳ |
-| P8-3 | 进度面板 | L4 | — | 三状态可切换 | ⏳ |
-| P8-4 | 转人工入口 | D4 | — | 点击可触发 | ⏳ |
-| P8-5 | 断流重连 | C2 | — | 不重复、不跳变 | ⏳ |
-| P8-6 | 四个演示场景验收 | L8 | 录屏 | 全部通过 | ⏳ |
+| P8-0 | 后端契约：历史接口 / 回放 / progress / 转人工 / 迁移 | Ch08 spec | `app/api/*`、`scripts/migrate_ch08.py` | 见 plan Task 0–6 | ✅ |
+| P8-1 | 前端脚手架（Vite + React） | L4 | `client/` | 起得来 | ✅ |
+| P8-2 | 聊天 + SSE 流式 | L4 | — | 流式渲染正常 | ✅ |
+| P8-3 | 进度面板 | L4 | — | 三状态可切换 | ✅ |
+| P8-4 | 转人工入口 | D4 | — | 点击可触发 | ✅ |
+| P8-5 | 断流重连 | C2 | `client/src/state/reconnect.ts`、`App.tsx` | 不重复、不跳变 | ✅ |
+| P8-6 | 四个演示场景验收 | L8 | `docs/reports/ch08-acceptance.md` | API / 回归 / 断流演练 / 三张截图通过；录屏待补 | ⚠️ |
 
 ---
 
@@ -190,10 +197,27 @@ D 的建单（P4-3）仍待做。
 
 | # | 任务 | 依据 | 验收 | 状态 |
 |---|---|---|---|---|
-| P9-1 | README 定稿（≤150 行，含局限） | L8 | 五段齐全 | ⏳ |
-| P9-2 | 三张截图 | L8 | 主界面/进度/评测报告 | ⏳ |
+| P9-1 | README 定稿（≤150 行，含局限） | L8 | 五段齐全 | ✅ |
+| P9-2 | 三张截图 | L8 | 主界面 / 退款进度 / 知识问答引用 | ✅ |
 | P9-3 | 2 分钟视频 | L8 | 四个场景 | ⏳ |
 | P9-4 | 仓库公开前检查 | L8-b | 无密钥、无真实数据 | ⏳ |
+
+---
+
+## P10 · 数据飞轮（可选，5–6 人日） · 对应 [Ch09](./ch09-flywheel.md)
+
+> 不阻塞 Ch01–Ch08 验收；触发条件：需要把低置信问题补进知识库，或要做飞轮演示。
+> 详细设计见 [ch09-flywheel-design.md](../specs/ch09-flywheel-design.md)。
+
+| # | 任务 | 依据 | 产出 | 验收 | 状态 |
+|---|---|---|---|---|---|
+| P10-1 | 迁移：`low_conf_questions.suggested_answer` + 索引 + FAQ 唯一部分索引 | K1、K5 | `scripts/migrate_ch09.py`、`app/db/models.py` | 重复执行幂等；schema 一致 | ✅ |
+| P10-2 | 批处理：标准化 + LLM/embedding 查重 | C3、K5 | `app/core/flywheel.py`、`scripts/flywheel.py` | 新建/合并/驳回不复活/幻觉 id 跳过 | ✅ |
+| P10-3 | 审核服务 + CLI（API 可选） | C3 | `scripts/review.py`、`app/api/review.py` | 通过/驳回/409/422 | ✅ |
+| P10-4 | FAQ 写回 + 合并进 Chroma + `kb_version` | K1、K6 | `scripts/build_kb.py`、`app/kb/loader.py` | 补库后能检索到 `faq-*` | ✅ |
+| P10-5 | 补库前后评测 + 库外拒答 + 44 条回归 | L1、K6 | `scripts/eval_flywheel.py`、验收报告 | `hit@3` 上升；库外拒答不降；44/44 | ✅ |
+| P10-6 | 点踩 / 规则冲突入口（可选） | C3 | `app/api/feedback.py`、`rules_exit` | down 落池；up 不落库 | ✅ |
+| P10-7 | 审核 UI（可选） | C3 | `client/` | 列表/详情/通过/驳回 | ✅ |
 
 ---
 
@@ -206,9 +230,11 @@ P1 ──► P2 ──► P3 ──► P4
 P1 ──► P5（多轮依赖会话与消息表）
 P3 ──► P6（安全依赖工具与回答链路）
 P4/P5 ──► P8（前端要有完整后端）
+P7/P8 ──► P10（可选；评测与演示就绪后再做飞轮）
 ```
 
 **可并行**：P2 与 P1 后半段可并行（写文档 vs 建表）；P8 前半段脚手架可提前。
+P10 不阻塞 P9 交付；可先做 P10-1~P10-5 的 CLI 闭环，再决定是否做 UI。
 
 ---
 
@@ -223,5 +249,5 @@ P4/P5 ──► P8（前端要有完整后端）
 | 并发与超时 | P5-6/7、P3-12 |
 | 安全 | P6 全部 |
 | 数据一致性 | P1-3、P7-3 |
-| 数据飞轮 | P4-5（落池）、后续审核页 |
+| 数据飞轮 | P4-5（落池）、P10（完整闭环，可选） |
 | 工程与交付 | P0、P7-4、P8、P9 |

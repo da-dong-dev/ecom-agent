@@ -23,6 +23,7 @@ class ConversationState(TypedDict, total=False):
     resolved_query: str           # 补全后的完整问句；本章 = raw_query（透传，Ch05 真做）
     intent: str                   # 12 类之一；分类失败/越界 = "其他"
     intent_confidence: float      # 0–1；只做标记（<0.5 打 low_conf），不改路由
+    multi_intent: bool            # 这句话里是否还有别的诉求；true 时先澄清
     route: str                    # 5 出口之一：knowledge/data/rules/human/fallback
     evidence: list[dict]          # 命中 chunk 原文 [{id,text,source,similarity}]；本章存全量
     evidence_strong: bool         # 最终闸结论（机械 + 语义自评）

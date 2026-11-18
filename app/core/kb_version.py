@@ -11,9 +11,14 @@
 排序是哈希稳定的前提，放在这里再排一次是有意的防御。
 """
 import hashlib
-from functools import lru_cache
+from typing import Any
 
-from app.kb.loader import load_chunks
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import Faq
+from app.db.session import async_session
+from app.kb.loader import faq_chunks, load_chunks
 
 
 def kb_version(chunks: list[dict] | None = None) -> str:
@@ -25,11 +30,38 @@ def kb_version(chunks: list[dict] | None = None) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
-@lru_cache
-def cached_kb_version() -> str:
-    """给 `/api/meta` 用：每次请求都读 7 个文件没必要，内容不变时哈希也不变。
+async def current_kb_version(
+    session: AsyncSession | None = None,
+) -> str:
+    """当前知识库版本：静态语料 + 已审核且待同步/已同步的 FAQ。
 
-    语料改了要重启服务（或清缓存）才会更新——这是有意的：
-    kb_version 是"当前进程在用的知识库"，不是"磁盘上现在的样子"。
+    与 `build_kb.py` 的版本口径一致；`/api/meta` 用它判断评测是否可比。
     """
+    own = session is None
+    s = session if session is not None else async_session()
+    try:
+        rows = list(
+            (
+                await s.scalars(
+                    select(Faq)
+                    .where(
+                        Faq.reviewed_at.is_not(None),
+                        Faq.sync_status.in_(("pending", "synced")),
+                    )
+                    .order_by(Faq.id)
+                )
+            ).all()
+        )
+        faq_rows: list[dict[str, Any]] = [
+            {"id": row.id, "question": row.question, "answer": row.answer}
+            for row in rows
+        ]
+        return kb_version(load_chunks() + faq_chunks(faq_rows))
+    finally:
+        if own:
+            await s.close()
+
+
+def cached_kb_version() -> str:
+    """静态语料版本（兼容旧调用）；`/api/meta` 已改用 `current_kb_version`。"""
     return kb_version()

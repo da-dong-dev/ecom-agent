@@ -16,9 +16,12 @@ from openai import APITimeoutError
 from pydantic import BaseModel, Field
 
 from app.api.chat import ChatError, conversation_access, run_turn
+from app.api.conversations import router as conversations_router
 from app.api.eval import router as eval_router
+from app.api.feedback import router as feedback_router
+from app.api.review import router as review_router
 from app.config import get_settings, validate_or_die
-from app.core.kb_version import cached_kb_version
+from app.core.kb_version import current_kb_version
 from app.core.logging import new_trace_id, setup_logging, trace_id_var
 
 logger = logging.getLogger(__name__)
@@ -33,6 +36,9 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ecom-agent", version="0.1.0", lifespan=lifespan)
 app.include_router(eval_router)
+app.include_router(conversations_router)
+app.include_router(feedback_router)
+app.include_router(review_router)
 
 
 @app.middleware("http")
@@ -74,7 +80,7 @@ async def meta() -> dict:
         **get_settings().safe_summary(),
         # 放在后面覆盖：safe_summary 里的 kb_version 来自配置（永远是空串），
         # 真正该报的是**当前语料算出来的**哈希
-        "kb_version": cached_kb_version(),      # K6：评测快照靠它判断可比性
+        "kb_version": await current_kb_version(),  # K6：含已审核 FAQ
     }
 
 

@@ -52,7 +52,7 @@
 
 ```
 层内（诊断）                                端到端（验收）
-eval_retrieval  ─┐                          ecom :8081
+eval_retrieval  ─┐                          ecom :8091
 eval_gate       ─┼─ docs/reports/*.md       /api/eval/chat ◀── EvalFlow :8002
 eval_knowledge  ─┤                          /api/meta      ◀── run 快照
 eval_refund     ─┘                          run-01 / run-02 / gate
@@ -257,7 +257,7 @@ hits = [
 | 项 | 做法 |
 |---|---|
 | 端点开关 | `ENABLE_EVAL_API=true` 才响应；否则 404（不是 403） |
-| 绑定地址 | 评测实例只绑 `127.0.0.1:8081` |
+| 绑定地址 | 评测实例只绑 `127.0.0.1:8091` |
 | 数据库 | `DATABASE_URL=sqlite+aiosqlite:///./data/eval.db`，不碰演示库 |
 | 实例 | 不加 `--reload`；评测期间不重启 |
 | 鉴权 | Ch07 不做；生产不开启该开关 |
@@ -268,8 +268,8 @@ hits = [
 |---|---|
 | Chroma | 8000 |
 | EvalFlow | 8002 |
-| ecom 评测实例 | **8081** |
-| ecom 日常开发 | 8080（`--reload`，不用于评测） |
+| ecom 评测实例 | **8091** |
+| ecom 日常开发 | 8090（`--reload`，不用于评测） |
 
 ### 3.4 错误语义
 
@@ -290,7 +290,7 @@ EvalFlow 适配器对 4xx **不重试**（样本失败）；对 5xx / 超时最�
 
 ```bash
 EVAL_TARGET=ecom
-ECOM_BASE_URL=http://127.0.0.1:8081
+ECOM_BASE_URL=http://127.0.0.1:8091
 ECOM_TIMEOUT=120
 ECOM_MAX_RPM=30
 ```
@@ -517,7 +517,7 @@ Ch07 用一份独立的困难集补测：
 | C7-2 | 评测层级 | **层内脚本 + 端到端 EvalFlow** | 只保留一种 | 失败要能归因到检索 / 生成 / 路由 |
 | C7-3 | 评测集规模 | **44 条，7 桶** | 严格 40 / 100+ | 按数据设计配比；语料小，扩大会过拟合 |
 | C7-4 | 多轮 | **单轮评测** | EvalFlow 改数据模型 | 成本高；Ch05 已有场景覆盖 |
-| C7-5 | 评测端点 | **`ENABLE_EVAL_API` + 独立库 + 8081** | 直接挂在主实例 | 不污染演示数据；可随时关闭 |
+| C7-5 | 评测端点 | **`ENABLE_EVAL_API` + 独立库 + 8091** | 直接挂在主实例 | 不污染演示数据；可随时关闭 |
 | C7-6 | 证据契约 | **`references` 被引用 + `hits` 全量 top-k** | 只给 citations | hit@k / MRR 需要未引用的候选 |
 | C7-7 | 无证据指标 | **记 NULL，不记 0** | 记 0 | B/C/E 没有检索，0 分是错的 |
 | C7-8 | 要点语法 | **`/` 必选 + `\|` 任选** | 纯字面 | 同义说法多，字面会误判 |

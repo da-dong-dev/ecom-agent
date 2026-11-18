@@ -49,6 +49,10 @@ CASES: list[tuple[str, str]] = [
     ("我的快递到哪了？", "物流查询"),
     ("ST-20 还有货吗？多少钱？", "库存价格"),
     ("订单 1001 我要退货", "退款申请"),
+    (
+        "订单1108的定制推车已经发货但我还没收到，家里情况有变不想要了，请帮我取消退款。",
+        "退款申请",
+    ),
     ("我上周买的推车降价了，能补差价吗？", "价保申请"),
     ("订单 1001 能改一下收货地址吗？", "订单变更"),
     ("你们这什么破服务，等了三天都没人管", "投诉"),
@@ -157,3 +161,17 @@ async def test_node_falls_back_to_raw_query_when_resolved_empty(monkeypatch):
     result = await classify_intent({"raw_query": "在吗", "resolved_query": ""})
     assert seen == ["在吗"]
     assert result["route"] == "fallback"
+
+
+async def test_multi_intent_node_routes_to_clarify(monkeypatch):
+    """多意图时先走 fallback 澄清，不能直接按主诉求问订单。"""
+
+    async def fake_classify(_query: str):
+        return ("退款申请", 0.9, True)
+
+    monkeypatch.setattr("app.graph.nodes.classify", fake_classify)
+    result = await classify_intent({"resolved_query": "我要退款，另外查物流"})
+
+    assert result["intent"] == "退款申请"
+    assert result["multi_intent"] is True
+    assert result["route"] == FALLBACK_ROUTE

@@ -34,6 +34,10 @@ def test_intent_routes_to_its_exit(intent: str, expected_route: str):
     assert route_by_intent({"intent": intent}) == expected_route
 
 
+def test_multi_intent_routes_to_fallback_clarification():
+    assert route_by_intent({"intent": "退款申请", "multi_intent": True}) == FALLBACK_ROUTE
+
+
 @pytest.mark.parametrize(
     "state",
     [

@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.prompts import EXTRACT_REASONS
 from app.graph.params import extract_order_id, extract_sku
 from app.graph.rules_exit import extract_draft
 
@@ -23,6 +24,7 @@ SELECTED_SLOTS = {
     "select_order": "order_id",
     "select_sku": "sku_id",
     "select_spec": "spec",
+    "select_reason": "reason_code",
 }
 
 # 这些槽位用 C 出口的抽取器（而不是正则）
@@ -109,6 +111,19 @@ async def fill(
                 value = str(value)
             elif pending_question == "sku_id":
                 value = str(value).upper()
+            elif pending_question == "reason_code":
+                reason = str(value)
+                if reason not in EXTRACT_REASONS:
+                    return SlotResult(False, None)
+                merged = {"reason_code": reason}
+                if reason == "other":
+                    reason_text = str(
+                        selected.get("reason_text") or cleaned or ""
+                    ).strip()
+                    if not reason_text:
+                        return SlotResult(False, None)
+                    merged["reason_text"] = reason_text
+                return SlotResult(True, "reason_code", merged)
             return SlotResult(True, pending_question, value)
 
     if not cleaned:

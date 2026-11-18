@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Ch07：评测专用门面 `/api/eval/chat`。默认关闭，只在本机评测实例打开。
     enable_eval_api: bool = False
 
+    # Ch09：人工审核 API。会写 FAQ，默认关闭；本地演示/审核时再打开。
+    enable_review_api: bool = False
+
     # 观测（可选）
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

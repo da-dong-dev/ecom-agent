@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Conversation, Message, Stock
+from app.db.models import Conversation, Faq, LowConfQuestion, Message, Stock
 
 EXPECTED_TABLES = {
     "conversations",
@@ -95,3 +95,77 @@ async def test_stock_unique_per_sku_and_spec(session):
     session.add(Stock(sku_id="ST-60", spec="标准装", stock=1, price=9800))
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+async def test_low_conf_suggested_answer_and_indexes(engine, session):
+    """Ch09：建议答案可写回，状态/合并字段有查询索引。"""
+    row = LowConfQuestion(
+        question="价保规则是什么",
+        suggested_answer="签收后 7 天内同款降价可申请补差。",
+    )
+    session.add(row)
+    await session.commit()
+
+    fetched = await session.get(LowConfQuestion, row.id)
+    assert fetched is not None
+    assert fetched.suggested_answer == "签收后 7 天内同款降价可申请补差。"
+
+    async with engine.connect() as conn:
+        indexes = await conn.run_sync(
+            lambda c: {
+                i["name"] for i in inspect(c).get_indexes("low_conf_questions")
+            }
+        )
+    assert {"idx_low_conf_status", "idx_low_conf_merged_into"} <= indexes
+
+
+async def test_flywheel_faq_source_question_is_unique(session):
+    """同一条 canonical 只能写回一条 flywheel FAQ。"""
+    session.add(
+        Faq(
+            question="价保规则是什么",
+            answer="签收后 7 天内可申请补差。",
+            source_type="flywheel",
+            source_question_id=1,
+        )
+    )
+    await session.commit()
+
+    session.add(
+        Faq(
+            question="价保规则是什么（重复）",
+            answer="重复写回。",
+            source_type="flywheel",
+            source_question_id=1,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await session.commit()
+
+
+async def test_manual_faq_does_not_hit_flywheel_unique_index(session):
+    """manual FAQ 不受 flywheel 唯一索引影响。"""
+    session.add_all(
+        [
+            Faq(
+                question="手工 FAQ 1",
+                answer="答案 1",
+                source_type="manual",
+                source_question_id=1,
+            ),
+            Faq(
+                question="手工 FAQ 2",
+                answer="答案 2",
+                source_type="manual",
+                source_question_id=1,
+            ),
+        ]
+    )
+    await session.commit()
+
+    count = (
+        await session.execute(
+            text("SELECT count(*) FROM faq WHERE source_type = 'manual'")
+        )
+    ).scalar()
+    assert count == 2
