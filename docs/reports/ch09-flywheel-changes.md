@@ -1,7 +1,7 @@
 # Ch09 数据飞轮 · 改动记录
 
 > 只增不改：记录每个 Task 的产出、为什么这样做、怎么验证。
-> 当前状态：Task 0–4 完成，尚未提交。
+> 当前状态：Task 0–5 完成，尚未提交。
 
 ---
 
@@ -451,3 +451,81 @@ approve id=3
 
 - 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §4.5、D-F11。
 - 下一步：Task 5（可选：点踩/规则冲突）或 Task 6（补库前后评测）。按计划先做 Task 6。
+
+---
+
+## 5 · Task 5 · 点踩与规则冲突入口（2026-11-18）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `app/api/feedback.py` | `POST /api/feedback`：点踩落池、点赞只记日志 |
+| `tests/api/test_feedback_api.py` | 7 条：down/up、幂等、归属、消息、空问题 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/main.py` | 没有反馈路由 | 注册 feedback router | C 端需要有明确的“答得不好”入口 |
+| `app/graph/rules_exit.py › compliance` | 分歧只写 span + 转人工 | 额外落 `low_conf_questions(source='rule_conflict')` | 模型与规则分歧是知识缺口/规则冲突的高价值样本，不能只留在 trace 里 |
+| `tests/graph/rules/test_transfer_paths.py` | 集成测试会走真实落池 | monkeypatch `record_low_conf` 为 no-op | 测试不应写 `data/app.db` |
+| `tests/graph/rules/test_compliance.py` | 只断言分歧转人工 | 新增“分歧落池”断言 | 防止只转人工、不沉淀样本 |
+
+### 反馈语义
+
+```text
+POST /api/feedback
+{"conversation_id": 1, "message_id": 12, "rating": "down", "question": "..."}
+
+down：
+  → 校验会话归属（Ch06）
+  → 校验 message 属于该会话且是 assistant
+  → question 为空时取最后一条 user 消息
+  → 写 low_conf_questions(source='feedback', hits=NULL, reason='feedback_down:{message_id}')
+  → 同一 message 重复点踩幂等
+
+up：
+  → 只记日志，不落库
+```
+
+规则冲突：
+
+```text
+compliance 发现 rule_divergence
+  → record_low_conf(source='rule_conflict', hits=None)
+  → reason = "rule_conflict:rule_divergence: ..."
+  → conversation_id 一并带上
+```
+
+`hits=None` 表示“不是检索弱证据”，审核详情里 `retrieved` 为 `NULL`；不要把它和知识缺口 `[]` 混在一起统计。
+
+### 未做（可选）
+
+前端 👍/👎 按钮没有加。当前先用 API / CLI 注入反馈样本；Task 7 审核 UI 也仍是可选。
+如果后续要做，前端只需在助手气泡下加两个按钮，调用 `/api/feedback`。
+
+### 验证
+
+```bash
+uv run pytest tests/api/test_feedback_api.py tests/graph/rules/test_compliance.py -q
+# 37 passed（含原有 compliance / transfer 测试）
+
+uv run pytest -q
+# 1136 passed, 9 skipped
+
+uv run ruff check .
+# All checks passed!
+```
+
+### 边界
+
+- 反馈接口默认启用；当前没有真实登录，归属仍依赖 `demo_user_id`。
+- 同一消息重复点踩幂等；不同消息同一问题会各落一条（保留上下文）。
+- `up` 不落库，避免把正向反馈混进低置信池。
+- 规则冲突落池失败只记日志，不影响转人工。
+
+### 关联
+
+- 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §4.2、D-F8。
+- 下一步：Task 6（补库前后评测）。

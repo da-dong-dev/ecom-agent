@@ -74,10 +74,14 @@ def patch_env(
     async def _span(**kwargs):
         return None
 
+    async def _record(**kwargs):
+        return 1
+
     monkeypatch.setattr(rules_exit, "get_order", _get_order)
     monkeypatch.setattr(rules_exit, "search", _search)
     monkeypatch.setattr(rules_exit, "structured_call", _structured)
     monkeypatch.setattr(rules_exit, "record_span", _span)
+    monkeypatch.setattr(rules_exit, "record_low_conf", _record)
     # 固定时钟：否则测试会随真实日期漂移（签收 7 天窗口）。
     monkeypatch.setattr(
         rules_exit, "utcnow", lambda: CREATED + timedelta(days=4)

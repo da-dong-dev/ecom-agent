@@ -55,6 +55,7 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.core.fallback import record_low_conf
 from app.core.format import yuan_text
 from app.core.llm import LLMFormatError, structured_call
 from app.core.llm import chat as llm_chat
@@ -562,6 +563,29 @@ async def _record_violation(state: ConversationState, violation: str, judgement:
     )
 
 
+async def _record_rule_conflict(
+    state: ConversationState, violation: str
+) -> None:
+    """模型与规则代码分歧时落池；失败只记日志，不影响转人工。"""
+    if not violation.startswith("rule_divergence:"):
+        return
+    question = (
+        state.get("raw_query") or state.get("resolved_query") or ""
+    ).strip()
+    if not question:
+        return
+    try:
+        await record_low_conf(
+            question=question,
+            reason=f"rule_conflict:{violation}",
+            hits=None,
+            conversation_id=state.get("conversation_id"),
+            source="rule_conflict",
+        )
+    except Exception:
+        logger.exception("规则冲突落池失败")
+
+
 async def compliance(state: ConversationState) -> dict:
     """合规核对：红线 + 独立复算。任一不通过 → 转人工。
 
@@ -585,6 +609,7 @@ async def compliance(state: ConversationState) -> dict:
         return {"compliance_violation": None}
 
     await _record_violation(state, violation, judgement)
+    await _record_rule_conflict(state, violation)
     updates: dict = {"compliance_violation": violation}
     updates.update(transfer(violation))
     return updates
