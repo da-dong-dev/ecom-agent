@@ -1,7 +1,7 @@
 # 面试自测方法
 
 > 用途：不靠"读一遍文档"，靠**闭卷输出 + 对照 + 代码定位**发现漏洞。
-> 配套：[ch01](./ch01-data-foundation.md) / [ch02](./ch02-retrieval-skeleton.md) / [ch03](./ch03-refund.md) / [ch04](./ch04-data-exit.md) / [ch05](./ch05-multi-turn.md) / [ch06](./ch06-security.md) / [ch07](./ch07-eval.md) / [ch08](./ch08-frontend.md)
+> 配套：[ch01](./ch01-data-foundation.md) / [ch02](./ch02-retrieval-skeleton.md) / [ch03](./ch03-refund.md) / [ch04](./ch04-data-exit.md) / [ch05](./ch05-multi-turn.md) / [ch06](./ch06-security.md) / [ch07](./ch07-eval.md) / [ch08](./ch08-frontend.md) / [ch09](./ch09-flywheel.md)
 
 ---
 

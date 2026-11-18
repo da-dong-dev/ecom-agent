@@ -157,6 +157,7 @@ Ch09 离线数据飞轮已完成闭环（Task 0–8，含审核 UI）。
 | [../interview/ch06-security.md](../interview/ch06-security.md) | Ch06：归属、404、Prompt 四区、输出检查、日志 |
 | [../interview/ch07-eval.md](../interview/ch07-eval.md) | Ch07：44 条评测集、双回路、阈值、退款困难组、judge 方差 |
 | [../interview/ch08-frontend.md](../interview/ch08-frontend.md) | Ch08：SSE 帧 reducer、进度/动作、历史恢复、C2-lite 断流 |
+| [../interview/ch09-flywheel.md](../interview/ch09-flywheel.md) | Ch09：标准化/查重、审核、FAQ 写回、补库前后评测 |
 | [../interview/database-qa.md](../interview/database-qa.md) | 数据库问答：索引 / 事务 / WAL / async ORM |
 | [../interview/self-test.md](../interview/self-test.md) | 自测方法：抽题表、评分标准、模拟面试与演示脚本 |
 

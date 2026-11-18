@@ -782,3 +782,22 @@ Playwright 截图：`docs/assets/ch09/03-feedback-buttons.png`。
 - 反馈状态只在前端内存；刷新后按钮恢复可点，后端按 message_id 幂等；
 - 没有登录，归属仍依赖 `demo_user_id`；
 - 点踩样本是原始 pending 行，必须跑 Task 2 批处理才会成为 canonical。
+
+---
+
+## 10 · 面试材料（2026-11-18）
+
+新增 [ch09-flywheel.md](../interview/ch09-flywheel.md)：
+
+- 30 秒版本；
+- 飞轮架构、状态机、标准化/查重、审核与写回；
+- 补库前后指标与失败归因；
+- 4 个 STAR 踩坑故事；
+- 追问清单、不要说的话、数字速查、5 分钟演示脚本。
+
+索引同步：
+
+- `docs/interview/README.md`
+- `docs/reports/README.md`
+- `docs/reports/resume-positioning.md`
+- `docs/interview/self-test.md`
