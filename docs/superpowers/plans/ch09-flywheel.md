@@ -694,19 +694,19 @@ cd client && npm run typecheck && npm test && npm run build
 
 ## 验收清单
 
-- [ ] 迁移幂等；新库/老库都能跑。
-- [ ] 低置信问题能进池；`retrieved` 三态正确。
-- [ ] 批处理能新建 canonical、合并同义、累加 occurrence。
-- [ ] 驳回终态；同义问题不复活。
-- [ ] approve 写 FAQ；重复 approve 不重复写。
-- [ ] FAQ 写回后 `build_kb.py` 能检索命中 `faq-*`。
-- [ ] 同步失败保持 `approved/pending`，可重试，不假 `written_back`。
-- [ ] `kb_version` 包含 FAQ，`/api/meta` 反映变化。
-- [ ] 补库前/后 badcase `hit@3` 上升。
-- [ ] 库外题拒答率不下降。
-- [ ] Ch07 44 条确定性回归仍为 44/44。
-- [ ] 文档明确“离线模拟飞轮，无真实用户流量”。
-- [ ] 全量测试与 ruff 通过。
+- [x] 迁移幂等；新库/老库都能跑。
+- [x] 低置信问题能进池；`retrieved` 三态正确。
+- [x] 批处理能新建 canonical、合并同义、累加 occurrence。
+- [x] 驳回终态；同义问题不复活。
+- [x] approve 写 FAQ；重复 approve 不重复写。
+- [x] FAQ 写回后 `build_kb.py` 能检索命中 `faq-*`。
+- [x] 同步失败保持 `approved/pending`，可重试，不假 `written_back`。
+- [x] `kb_version` 包含 FAQ，`/api/meta` 反映变化。
+- [x] 补库前/后 badcase `hit@3` 上升。
+- [x] 库外题拒答率不下降。
+- [x] Ch07 44 条确定性回归仍为 44/44。
+- [x] 文档明确“离线模拟飞轮，无真实用户流量”。
+- [x] 全量测试与 ruff 通过。
 
 ---
 

@@ -687,6 +687,49 @@ Playwright 实机检查：
 
 ---
 
+## 8 · Task 8 · 文档收尾与最终验证（2026-11-18）
+
+### 文档
+
+- `ch09-flywheel.md` 验收清单 13 项全部勾选；
+- `todo.md` P4-8 标为“离线模拟闭环已完成”，线上飞轮边界保留；
+- `00-change-log-overview.md`、`reports/README.md`、`README.md`、`resume-positioning.md`
+  已同步 Ch09 完成状态；
+- 验收报告：[ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md)。
+
+### 最终验证
+
+```text
+uv run pytest -q
+→ 1142 passed, 9 skipped
+
+uv run ruff check .
+→ All checks passed!
+
+uv run python scripts/init_db.py
+→ 10 张表；schema.sql 与 ORM 一致
+
+uv run python scripts/migrate_ch09.py --db data/app.db
+→ 已是最新
+uv run python scripts/migrate_ch09.py --db data/eval.db
+→ 已是最新
+
+cd client && npm run typecheck
+→ 通过
+npm test
+→ 13 files, 88 tests passed
+npm run build
+→ 通过；1121.87 kB（gzip 351.20 kB）
+```
+
+文档测试：`71 passed, 8 skipped`。
+
+### 结论
+
+Ch09 Task 0–8 全部完成；代码、评测、审核 UI、C 端反馈和文档索引均已收尾。
+
+---
+
 ## 9 · C 端反馈按钮（Task 5 补做，2026-11-18）
 
 ### 新增/修改
