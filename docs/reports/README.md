@@ -7,7 +7,7 @@
 
 **当前进度**：Ch01–Ch08 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)；
 Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已补，录屏待补；
-Ch09 离线数据飞轮已完成闭环（Task 0–6；审核 UI 可选未做）。
+Ch09 离线数据飞轮已完成闭环（Task 0–8，含审核 UI）。
 
 > **第一次读 Ch07 / 想重新理解全章**：先看
 > [ch07-overview.md](./ch07-overview.md)——它把“为什么做、每个任务做什么、
@@ -69,7 +69,7 @@ Ch09 离线数据飞轮已完成闭环（Task 0–6；审核 UI 可选未做）�
 | [ch06-security-changes.md](./ch06-security-changes.md) | 安全：越权、404、Prompt 四区、输出检查、日志 | ✅ |
 | [ch07-eval-changes.md](./ch07-eval-changes.md) | 评测：44 条评测集、评测门面、EvalFlow、阈值与传导 | ✅ |
 | [ch08-frontend-changes.md](./ch08-frontend-changes.md) | 前端：SSE、进度、动作、历史、断流、验收 | ✅ |
-| [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 数据飞轮（离线模拟）：落池、标准化、审核、写回、评测 | ✅ 闭环 |
+| [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 数据飞轮（离线模拟）：落池、标准化、审核、写回、评测、审核 UI | ✅ 闭环 |
 
 ### 3.2 验收报告（一章做完时写）
 

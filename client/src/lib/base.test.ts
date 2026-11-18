@@ -25,6 +25,12 @@ describe("errorForStatus", () => {
     expect(error.status).toBe(503);
     expect(error.code).toBe("internal_error");
   });
+
+  it("maps review statuses to actionable codes", () => {
+    expect(errorForStatus(409).code).toBe("conflict");
+    expect(errorForStatus(422).code).toBe("invalid_arg");
+    expect(errorForStatus(502).code).toBe("sync_failed");
+  });
 });
 
 describe("request", () => {
@@ -43,6 +49,25 @@ describe("request", () => {
     const init = fetchMock.mock.calls[0][1];
     const headers = new Headers(init?.headers);
     expect(headers.get("X-Trace-Id")).toBeTruthy();
+  });
+
+  it("uses structured detail message when present", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            detail: { code: "sync_failed", message: "知识库同步失败" },
+          }),
+          { status: 502, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(request("/api/review/1/approve")).rejects.toMatchObject({
+      status: 502,
+      code: "sync_failed",
+      message: "知识库同步失败",
+    });
   });
 });
 

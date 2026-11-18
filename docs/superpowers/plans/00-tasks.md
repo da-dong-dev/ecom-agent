@@ -217,7 +217,7 @@ D 的建单（P4-3）仍待做。
 | P10-4 | FAQ 写回 + 合并进 Chroma + `kb_version` | K1、K6 | `scripts/build_kb.py`、`app/kb/loader.py` | 补库后能检索到 `faq-*` | ✅ |
 | P10-5 | 补库前后评测 + 库外拒答 + 44 条回归 | L1、K6 | `scripts/eval_flywheel.py`、验收报告 | `hit@3` 上升；库外拒答不降；44/44 | ✅ |
 | P10-6 | 点踩 / 规则冲突入口（可选） | C3 | `app/api/feedback.py`、`rules_exit` | down 落池；up 不落库 | ✅ |
-| P10-7 | 审核 UI（可选） | C3 | `client/` | 列表/详情/通过/驳回 | ⏳ |
+| P10-7 | 审核 UI（可选） | C3 | `client/` | 列表/详情/通过/驳回 | ✅ |
 
 ---
 

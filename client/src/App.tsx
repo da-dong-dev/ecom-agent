@@ -27,9 +27,11 @@ export default function App() {
     conversationLoading,
     cooldown,
     visibleActions,
+    feedbackByMessage,
     handleSend,
     handleRetry,
     handleAction,
+    handleFeedback,
     handleStop,
     handleNewConversation,
     handleSelectConversation,
@@ -100,11 +102,15 @@ export default function App() {
             )}
             actions={visibleActions}
             actionDisabled={state.inFlight || cooldown}
+            feedbackByMessage={feedbackByMessage}
             onSuggestion={(text) => {
               void handleSend(text);
             }}
             onAction={(action) => {
               void handleAction(action);
+            }}
+            onFeedback={(message, rating) => {
+              void handleFeedback(message, rating);
             }}
             onRetry={() => {
               void handleRetry();

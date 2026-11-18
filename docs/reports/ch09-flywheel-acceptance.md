@@ -21,10 +21,22 @@
 | FAQ 写回 + 向量化 | ✅ | Task 4；`faq-*` chunk 进入 Chroma |
 | 检索命中 | ✅ | 补库后 badcase citation_hit 12/12 |
 | 补库前后评测 | ✅ | 本报告；before/after 同 fixture、同 dataset_hash |
-| 点踩 / 规则冲突入口 | ✅ | Task 5；API 与 compliance 落池 |
-| 审核 UI | ⏭️ 可选，未做 | CLI/API 已够 MVP |
+| 点踩 / 规则冲突入口 | ✅ | Task 5；API、C 端 👍/👎、compliance 落池 |
+| 审核 UI | ✅ 可选已做 | `/#review`；队列、详情、通过/驳回、重试同步 |
 
 不做：自动写回、实时入队、线上用户反馈闭环、模型微调、多级审批。
+
+### 1.1 审核 UI
+
+访问 `/#review`（需 `ENABLE_REVIEW_API=true`）：
+
+![审核队列](../assets/ch09/01-review-queue.png)
+
+![审核详情](../assets/ch09/02-review-detail.png)
+
+C 端助手气泡下的反馈入口：
+
+![反馈按钮](../assets/ch09/03-feedback-buttons.png)
 
 ---
 
@@ -234,7 +246,7 @@ uv run python scripts/eval_e2e.py \
 
 - 这是 12 条合成 badcase 的离线模拟，不是线上飞轮；
 - 12 条 FAQ 答案是人工补写的演示答案，不是真实平台政策；
-- 审核 UI 未做，先用 CLI/API；
+- 审核 UI 已完成，但仍是本地内部页，没有登录/角色权限；
 - 每次 approve 全量重建 KB，数据量大后要增量同步。
 
-**下一步**：Task 7（可选审核 UI）或 Task 8 收尾；Ch09 的闭环目标已经达到。
+**下一步**：Ch09 已完成 Task 0–8；后续只做维护或增量同步优化。

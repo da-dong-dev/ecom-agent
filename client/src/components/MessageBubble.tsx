@@ -1,13 +1,23 @@
-import { Avatar, Flex, Popover } from "antd";
+import { DislikeOutlined, LikeOutlined } from "@ant-design/icons";
+import { Avatar, Button, Flex, Popover } from "antd";
 
+import type { FeedbackRating } from "../lib/api";
 import { formatMessageTime } from "../lib/time";
 import type { ChatMessage, CitationDetail } from "../state/turn";
 
 type Props = {
   message: ChatMessage;
+  feedback?: FeedbackRating;
+  feedbackDisabled?: boolean;
+  onFeedback?: (rating: FeedbackRating) => void;
 };
 
-export function MessageBubble({ message }: Props) {
+export function MessageBubble({
+  message,
+  feedback,
+  feedbackDisabled = false,
+  onFeedback,
+}: Props) {
   const isUser = message.role === "user";
   const citationIds = message.citationIds ?? [];
   const citations = message.citations ?? [];
@@ -34,6 +44,41 @@ export function MessageBubble({ message }: Props) {
         <div className="message-content">
           {renderContent(message.content, citationIds, citations)}
         </div>
+        {!isUser && message.id !== undefined && onFeedback ? (
+          <div className="message-feedback">
+            {feedback ? (
+              <span className="message-feedback-thanks">感谢反馈</span>
+            ) : (
+              <>
+                <span className="message-feedback-label">有帮助吗？</span>
+                <Flex gap={4}>
+                  <Button
+                    size="small"
+                    type="text"
+                    className="feedback-btn feedback-btn-up"
+                    icon={<LikeOutlined />}
+                    disabled={feedbackDisabled}
+                    aria-label="回答有帮助"
+                    onClick={() => onFeedback("up")}
+                  >
+                    有帮助
+                  </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    className="feedback-btn feedback-btn-down"
+                    icon={<DislikeOutlined />}
+                    disabled={feedbackDisabled}
+                    aria-label="回答没帮助"
+                    onClick={() => onFeedback("down")}
+                  >
+                    没帮助
+                  </Button>
+                </Flex>
+              </>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {isUser ? (

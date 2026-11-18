@@ -14,8 +14,7 @@
 **Tech Stack:** FastAPI / async SQLAlchemy + aiosqlite / SQLite / Chroma / Ollama；
 评测沿用 Ch07 的 `/api/eval/chat` 与 `scripts/eval_e2e.py`；不引入新运行时依赖。
 
-**状态：** Task 0–6 完成（2026-11-17～18），离线闭环已验收；
-Task 7（审核 UI）可选未做，Task 8 文档收尾进行中。
+**状态：** Task 0–8 完成（2026-11-17～18），离线闭环与可选审核 UI 均已完成。
 改动记录见 [ch09-flywheel-changes.md](../../reports/ch09-flywheel-changes.md)，
 验收见 [ch09-flywheel-acceptance.md](../../reports/ch09-flywheel-acceptance.md)。
 

@@ -1,7 +1,7 @@
 # Ch09 数据飞轮 · 改动记录
 
 > 只增不改：记录每个 Task 的产出、为什么这样做、怎么验证。
-> 当前状态：Task 0–6 完成，Task 7 可选未做，尚未提交。
+> 当前状态：Task 0–8 完成，尚未提交。
 
 ---
 
@@ -614,3 +614,128 @@ after:  hit@3=1.000 recall=0.958 citation_hit=1.000 refusal_rate=0.800
 - 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) D-F8、§6。
 - 验收：[ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md)。
 - 下一步：Task 7（可选审核 UI）或 Task 8 收尾。
+
+---
+
+## 7 · Task 7 · 审核 UI（可选，2026-11-18）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `client/src/pages/ReviewPage.tsx` | 审核列表、详情 Drawer、通过/驳回 Modal、重试同步 |
+| `docs/assets/ch09/01-review-queue.png` | 审核队列截图 |
+| `docs/assets/ch09/02-review-detail.png` | 详情 Drawer 截图 |
+| `client/src/lib/review-api.test.ts` | 4 条审核 API 请求测试 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `client/src/main.tsx` | 只渲染聊天 App | `#review` 渲染 ReviewPage | 不引入 router，内部页用 hash 隔离，C 端聊天不变 |
+| `client/src/lib/api.ts` | 只有会话接口 | 审核队列/详情/approve/reject/retry | 审核页需要独立 API 封装 |
+| `client/src/lib/base.ts` | 409/422/502 统一 internal_error | 增加 conflict/invalid_arg/sync_failed，并解析 `detail.message` | 审核失败要显示“同步失败/状态不可流转”，不能只说服务不可用 |
+| `client/src/styles.css` | 只有聊天样式 | 审核页背景、卡片、详情/命中块 | 内部页也需要可读的布局 |
+
+### 页面能力
+
+```text
+/#review
+  → 状态 Tab：待审核 / 已通过 / 已写回 / 已驳回
+  → 表格：id、出现次数、标准问题+原话、建议答案、状态、操作
+  → 详情 Drawer：
+      - 标准问题 / 原话 / 来源 / 原因 / 建议答案
+      - 检索快照三态：NULL / [] / [...]
+      - 归并原话列表
+  → pending：通过并写回 / 驳回
+  → approved：重试同步
+  → API 关闭（404）：提示设置 ENABLE_REVIEW_API=true
+```
+
+不引入 `react-router`：`#review` 只影响入口渲染，聊天页仍走 `/`。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 12 files, 84 tests passed
+npm run build       # 通过；dist JS 1118.13 kB（gzip 349.91 kB）
+```
+
+Playwright 实机检查：
+
+```text
+审核队列：10 条 pending
+详情 #12：检索零命中（[]）、无归并原话
+通过 Modal：建议答案预填、空答案会拦截
+```
+
+### 边界
+
+| 边界 | 说明 |
+|---|---|
+| 权限 | 没有登录/角色，审核页是本地内部页 |
+| 分页 | MVP 不做分页；队列最多返回当前状态全部 canonical |
+| 审核 API | 默认关闭；需 `.env` 设置 `ENABLE_REVIEW_API=true` |
+| 截图 | 只作内部演示，不代表生产 UI |
+
+### 关联
+
+- 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) D-F7。
+- 下一步：Task 8 文档收尾（本文已完成）。
+
+---
+
+## 9 · C 端反馈按钮（Task 5 补做，2026-11-18）
+
+### 新增/修改
+
+| 文件 | 改动 |
+|---|---|
+| `client/src/components/MessageBubble.tsx` | 助手气泡下增加「有帮助 / 没帮助」 |
+| `client/src/components/ChatWindow.tsx` | 透传 feedback 状态与回调 |
+| `client/src/hooks/useChatSession.ts` | `handleFeedback`：找上一条 user 问题、调 `/api/feedback`、本地置灰 |
+| `client/src/App.tsx` | 把 `feedbackByMessage` / `handleFeedback` 接到 ChatWindow |
+| `client/src/lib/api.ts` | `sendFeedback` |
+| `client/src/styles.css` | 反馈行样式 |
+| `client/src/components/message-bubble.test.tsx` | 3 条反馈 UI 测试 |
+| `client/src/lib/feedback-api.test.ts` | 1 条请求体测试 |
+| `docs/assets/ch09/03-feedback-buttons.png` | 截图 |
+
+### 交互
+
+```text
+助手消息 id 存在 + 不在生成中
+  → 显示「这个回答有帮助吗？ 👍 有帮助 / 👎 没帮助」
+  → 点击后调 POST /api/feedback
+  → 本地点完置灰，显示「感谢反馈」
+  → 切换会话时清空本地 feedback 状态
+```
+
+- `down` 落池 `source=feedback`、`hits=NULL`；要等 Task 2 批处理标准化后才进审核队列；
+- `up` 后端只记日志，不落库；
+- 用户消息、in-flight 草稿、没有 id 的消息不显示按钮。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck   # 通过
+npm test            # 13 files, 88 tests passed
+npm run build       # 通过；dist JS 1121.87 kB（gzip 351.20 kB）
+```
+
+Playwright 截图：`docs/assets/ch09/03-feedback-buttons.png`。
+
+点击验证（feedback API 用 mock，未写真实库）：
+
+```json
+{"conversation_id":57,"message_id":254,"rating":"down","question":"订单1002 不想要了"}
+```
+
+### 边界
+
+- 反馈状态只在前端内存；刷新后按钮恢复可点，后端按 message_id 幂等；
+- 没有登录，归属仍依赖 `demo_user_id`；
+- 点踩样本是原始 pending 行，必须跑 Task 2 批处理才会成为 canonical。

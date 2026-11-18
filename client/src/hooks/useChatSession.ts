@@ -1,7 +1,7 @@
-import { Modal } from "antd";
-import { useReducer, useRef, useState } from "react";
+import { message as antdMessage, Modal } from "antd";
+import { useEffect, useReducer, useRef, useState } from "react";
 
-import { getMessages } from "../lib/api";
+import { getMessages, sendFeedback, type FeedbackRating } from "../lib/api";
 import { actionLabel } from "../lib/actionLabel";
 import { ApiError } from "../lib/base";
 import { sendChat } from "../lib/sse";
@@ -16,6 +16,7 @@ import {
   newClientMessageId,
   turnReducer,
   type AssistantAction,
+  type ChatMessage,
 } from "../state/turn";
 import { visibleActionsFor } from "../state/visibleActions";
 import { useConversations } from "./useConversations";
@@ -29,8 +30,15 @@ import { useConversations } from "./useConversations";
 export function useChatSession() {
   const [state, dispatch] = useReducer(turnReducer, initialTurnState());
   const [cooldown, setCooldown] = useState(false);
+  const [feedbackByMessage, setFeedbackByMessage] = useState<
+    Record<number, FeedbackRating>
+  >({});
   const abortRef = useRef<AbortController | null>(null);
   const switchingRef = useRef(false);
+
+  useEffect(() => {
+    setFeedbackByMessage({});
+  }, [state.conversationId]);
   const {
     conversations,
     conversationLoading,
@@ -214,6 +222,47 @@ export function useChatSession() {
     }
   }
 
+  async function handleFeedback(
+    target: ChatMessage,
+    rating: FeedbackRating,
+  ): Promise<void> {
+    const messageId = target.id;
+    const conversationId = state.conversationId;
+    if (messageId === undefined || conversationId === null) {
+      return;
+    }
+
+    const index = state.messages.findIndex((item) => item.id === messageId);
+    const question =
+      [...state.messages.slice(0, Math.max(0, index))]
+        .reverse()
+        .find((item) => item.role === "user")?.content ?? "";
+
+    try {
+      const result = await sendFeedback({
+        conversation_id: conversationId,
+        message_id: messageId,
+        rating,
+        question,
+      });
+      setFeedbackByMessage((current) => ({
+        ...current,
+        [messageId]: rating,
+      }));
+      if (rating === "up") {
+        antdMessage.success("感谢反馈");
+      } else {
+        antdMessage.success(
+          result.recorded ? "已记录，我们会优先处理" : "已经反馈过了",
+        );
+      }
+    } catch (error) {
+      antdMessage.error(
+        error instanceof Error ? error.message : "反馈提交失败，请稍后重试",
+      );
+    }
+  }
+
   function handleStop() {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -285,9 +334,11 @@ export function useChatSession() {
     conversationLoading,
     cooldown,
     visibleActions,
+    feedbackByMessage,
     handleSend,
     handleRetry,
     handleAction,
+    handleFeedback,
     handleStop,
     handleNewConversation,
     handleSelectConversation,

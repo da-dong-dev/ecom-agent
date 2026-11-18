@@ -10,6 +10,7 @@ import {
 import { CustomerServiceOutlined } from "@ant-design/icons";
 import { Fragment, useEffect, useRef, type ReactNode } from "react";
 
+import type { FeedbackRating } from "../lib/api";
 import type { AssistantAction, ChatMessage } from "../state/turn";
 import { ActionBar } from "./ActionBar";
 import { MessageBubble } from "./MessageBubble";
@@ -31,8 +32,10 @@ type Props = {
   progressLabel?: string | null;
   actions?: AssistantAction[];
   actionDisabled?: boolean;
+  feedbackByMessage?: Record<number, FeedbackRating>;
   onSuggestion?: (text: string) => void;
   onAction?: (action: AssistantAction) => void;
+  onFeedback?: (message: ChatMessage, rating: FeedbackRating) => void;
   onRetry: () => void;
 };
 
@@ -47,8 +50,10 @@ export function ChatWindow({
   progressLabel = null,
   actions = [],
   actionDisabled = false,
+  feedbackByMessage = {},
   onSuggestion,
   onAction,
+  onFeedback,
   onRetry,
 }: Props) {
   const showWelcome = messages.length === 0 && suggestions.length > 0;
@@ -149,7 +154,20 @@ export function ChatWindow({
         ) : (
           messages.map((message, index) => (
             <Fragment key={message.id ?? `${message.role}-${index}`}>
-              <MessageBubble message={message} />
+              <MessageBubble
+                message={message}
+                feedback={
+                  message.id === undefined
+                    ? undefined
+                    : feedbackByMessage[message.id]
+                }
+                feedbackDisabled={inFlight}
+                onFeedback={
+                  onFeedback
+                    ? (rating) => onFeedback(message, rating)
+                    : undefined
+                }
+              />
               {showActions && index === lastAssistantIndex ? (
                 <ActionBar
                   actions={actions}
