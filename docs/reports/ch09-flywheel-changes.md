@@ -1,7 +1,7 @@
 # Ch09 数据飞轮 · 改动记录
 
 > 只增不改：记录每个 Task 的产出、为什么这样做、怎么验证。
-> 当前状态：Task 0–5 完成，尚未提交。
+> 当前状态：Task 0–6 完成，Task 7 可选未做，尚未提交。
 
 ---
 
@@ -529,3 +529,88 @@ uv run ruff check .
 
 - 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) §4.2、D-F8。
 - 下一步：Task 6（补库前后评测）。
+
+---
+
+## 6 · Task 6 · 补库前后评测 + 验收报告（2026-11-18）
+
+### 新增
+
+| 文件 | 内容 |
+|---|---|
+| `scripts/eval_flywheel.py` | before/after 评测：hit@3、recall、citation_hit、refusal_rate |
+| `tests/eval/test_eval_flywheel.py` | 5 条纯指标函数测试 |
+| `docs/reports/ch09-flywheel-before.{json,md}` | before 原始结果 |
+| `docs/reports/ch09-flywheel-after.{json,md}` | after 原始结果 |
+| `docs/reports/ch09-flywheel-regression-44.md` | 44 条确定性回归 |
+| `docs/reports/ch09-flywheel-acceptance.md` | 验收报告 |
+
+### 修改与原因
+
+| 文件 › 符号 | 旧逻辑 | 新逻辑 | 为什么旧的撑不住 |
+|---|---|---|---|
+| `app/core/prompts.py › INTENT_SYSTEM` | 多意图只看“有没有两个诉求” | 补充“同一售后目标的多个条件/动作不算多意图” | B07「已发货未收到 + 取消退款」被误判成多意图，44 条回归掉到 43/44 |
+| `tests/graph/test_intent.py` | 只有两条多意图正例 | 增加 B07 的单一意图回归 | 防止 prompt 调整把“退款条件多”又标成多意图 |
+
+### 评测口径
+
+```text
+hit@3      = 前 3 条召回 chunk 含任一期望关键词
+recall     = 答案中出现期望关键词的比例
+citation   = 回答引用里是否出现 faq-*
+refusal    = route=human/fallback、transfer 动作、或明确拒答话术
+```
+
+同一份 fixture（`dataset_hash=fca8f2d1fd4b`），只改变知识库：
+
+| 指标 | before | after |
+|---|---:|---:|
+| hit@3 | 0.500 | **1.000** |
+| recall | 0.667 | **0.958** |
+| citation_hit | 0.000 | **1.000** |
+| refusal_rate | 0.700 | **0.800** |
+| kb_version | `80bd26573951` | `865da1a0b66e` |
+
+44 条确定性回归：
+
+```text
+通过 44/44（100.0%）
+```
+
+### 验证
+
+```bash
+uv run pytest tests/eval/test_eval_flywheel.py -q
+# 5 passed
+
+uv run pytest -q
+# 1142 passed, 9 skipped
+
+uv run ruff check .
+# All checks passed!
+```
+
+真实 before/after（临时库 + 两个隔离 Chroma 集合）：
+
+```text
+before: hit@3=0.500 recall=0.667 citation_hit=0.000 refusal_rate=0.700
+after:  hit@3=1.000 recall=0.958 citation_hit=1.000 refusal_rate=0.800
+```
+
+临时集合 `ecom_kb_ch09_before` / `ecom_kb_ch09_after` 已删除，正式 `ecom_kb` 未受影响。
+
+### 边界
+
+| 边界 | 说明 |
+|---|---|
+| 样本量 | 12 条 badcase + 10 条库外题，不是线上统计 |
+| 答案来源 | 人工补写的合成答案，不是真实平台政策 |
+| F07 recall=0.50 | 生成用「寄丢」，期望词是「丢失」；检索/引用都命中 |
+| O01/O07 | 补库前后都未拒答，属于既有 data 路由问题，与飞轮无关 |
+| 审核 UI | Task 7 可选未做 |
+
+### 关联
+
+- 设计依据：[ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md) D-F8、§6。
+- 验收：[ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md)。
+- 下一步：Task 7（可选审核 UI）或 Task 8 收尾。

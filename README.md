@@ -2,8 +2,8 @@
 
 面向消费者的售后客服（C 端），核心是把退费核算从人工翻合同变成可核对、可追溯的自动计算。
 
-> Ch01–Ch08 已在本地跑通；Ch09 数据飞轮是可选计划，见
-> [ch09-flywheel-design.md](docs/superpowers/specs/ch09-flywheel-design.md)。
+> Ch01–Ch08 已在本地跑通；Ch09 离线数据飞轮已完成闭环，
+> 见 [ch09-flywheel-acceptance.md](docs/reports/ch09-flywheel-acceptance.md)。
 > 设计文档见 [docs/design/](docs/design/)。
 
 ## 快速开始
@@ -84,7 +84,7 @@ npm run build             # 通过
 | Ch06 | 安全：注入防御 / 输出检查 | ✅ |
 | Ch07 | 评测：44 条评测集 / 阈值 / 退款困难组 | ✅ |
 | Ch08 | 前端：聊天 + 进度 + 动作 + 历史 + 断流 | ✅（三张截图已补；录屏待补） |
-| Ch09 | 数据飞轮（可选） | 📋 计划 |
+| Ch09 | 数据飞轮（离线模拟） | ✅ 闭环，审核 UI 可选未做 |
 
 ## 架构
 

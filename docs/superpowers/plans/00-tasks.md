@@ -211,12 +211,12 @@ D 的建单（P4-3）仍待做。
 
 | # | 任务 | 依据 | 产出 | 验收 | 状态 |
 |---|---|---|---|---|---|
-| P10-1 | 迁移：`low_conf_questions.suggested_answer` + 索引 + FAQ 唯一部分索引 | K1、K5 | `scripts/migrate_ch09.py`、`app/db/models.py` | 重复执行幂等；schema 一致 | ⏳ |
-| P10-2 | 批处理：标准化 + LLM/embedding 查重 | C3、K5 | `app/core/flywheel.py`、`scripts/flywheel.py` | 新建/合并/驳回不复活/幻觉 id 跳过 | ⏳ |
-| P10-3 | 审核服务 + CLI（API 可选） | C3 | `scripts/review.py`、`app/api/review.py` | 通过/驳回/409/422 | ⏳ |
-| P10-4 | FAQ 写回 + 合并进 Chroma + `kb_version` | K1、K6 | `scripts/build_kb.py`、`app/kb/loader.py` | 补库后能检索到 `faq-*` | ⏳ |
-| P10-5 | 补库前后评测 + 库外拒答 + 44 条回归 | L1、K6 | `scripts/eval_flywheel.py`、验收报告 | `hit@3` 上升；库外拒答不降；44/44 | ⏳ |
-| P10-6 | 点踩 / 规则冲突入口（可选） | C3 | `app/api/feedback.py`、`rules_exit` | down 落池；up 不落库 | ⏳ |
+| P10-1 | 迁移：`low_conf_questions.suggested_answer` + 索引 + FAQ 唯一部分索引 | K1、K5 | `scripts/migrate_ch09.py`、`app/db/models.py` | 重复执行幂等；schema 一致 | ✅ |
+| P10-2 | 批处理：标准化 + LLM/embedding 查重 | C3、K5 | `app/core/flywheel.py`、`scripts/flywheel.py` | 新建/合并/驳回不复活/幻觉 id 跳过 | ✅ |
+| P10-3 | 审核服务 + CLI（API 可选） | C3 | `scripts/review.py`、`app/api/review.py` | 通过/驳回/409/422 | ✅ |
+| P10-4 | FAQ 写回 + 合并进 Chroma + `kb_version` | K1、K6 | `scripts/build_kb.py`、`app/kb/loader.py` | 补库后能检索到 `faq-*` | ✅ |
+| P10-5 | 补库前后评测 + 库外拒答 + 44 条回归 | L1、K6 | `scripts/eval_flywheel.py`、验收报告 | `hit@3` 上升；库外拒答不降；44/44 | ✅ |
+| P10-6 | 点踩 / 规则冲突入口（可选） | C3 | `app/api/feedback.py`、`rules_exit` | down 落池；up 不落库 | ✅ |
 | P10-7 | 审核 UI（可选） | C3 | `client/` | 列表/详情/通过/驳回 | ⏳ |
 
 ---

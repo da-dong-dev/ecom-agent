@@ -2,9 +2,10 @@
 
 > 依据：C3（飞轮：落池 → 审核 → 补库）、K1（向量同步）、K5（溯源）、K6（`kb_version`）、L1（评测）。
 > 范围：**离线批处理 + 人工审核 + FAQ 写回 + 评测验证**；不做自动写回、实时入队、线上反馈闭环。
-> 状态：设计稿（2026-11-16）；Task 0–5 于 2026-11-17～18 完成
-> （fixture、迁移、标准化/查重、审核、FAQ 写回、点踩/规则冲突）；
-> Task 6 未开始。按 [ch09-flywheel.md](../plans/ch09-flywheel.md) 执行。
+> 状态：设计稿（2026-11-16）；Task 0–6 于 2026-11-17～18 完成，
+> 离线闭环已验收；Task 7（审核 UI）可选未做。
+> 验收见 [ch09-flywheel-acceptance.md](../../reports/ch09-flywheel-acceptance.md)，
+> 计划见 [ch09-flywheel.md](../plans/ch09-flywheel.md)。
 
 ---
 

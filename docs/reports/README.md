@@ -7,7 +7,7 @@
 
 **当前进度**：Ch01–Ch08 已完成（Ch07 见 [ch07-acceptance.md](./ch07-acceptance.md)；
 Ch08 见 [ch08-acceptance.md](./ch08-acceptance.md)）。三张界面截图已补，录屏待补；
-Ch09 数据飞轮为可选计划，Task 0–5（fixture、迁移、标准化/查重、审核、FAQ 写回、反馈入口）已完成。
+Ch09 离线数据飞轮已完成闭环（Task 0–6；审核 UI 可选未做）。
 
 > **第一次读 Ch07 / 想重新理解全章**：先看
 > [ch07-overview.md](./ch07-overview.md)——它把“为什么做、每个任务做什么、
@@ -17,9 +17,10 @@ Ch09 数据飞轮为可选计划，Task 0–5（fixture、迁移、标准化/查
 > [project-review.md](./project-review.md)——主线图、章节四格卡、决策地图、
 > 三个故事和自测题。当前已完成 Ch02 / Ch03 / Ch05，其余章节待补。
 >
-> **新窗口继续开发**：Ch08 已验收，下一步是 Ch09 数据飞轮（可选）；
-> 把 [ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md)
-> 和 [ch09-flywheel.md](../superpowers/plans/ch09-flywheel.md) 发给助手即可。
+> **新窗口继续开发**：Ch08 已验收，Ch09 离线数据飞轮已闭环；
+> 设计见 [ch09-flywheel-design.md](../superpowers/specs/ch09-flywheel-design.md)，
+> 计划见 [ch09-flywheel.md](../superpowers/plans/ch09-flywheel.md)，
+> 验收见 [ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md)。
 >
 > **想找“还有什么没做”**：看 [todo.md](./todo.md)——按 P0 阻塞项、产品缺口、
 > 评测边界、技术债、触发后优化分类。
@@ -68,7 +69,7 @@ Ch09 数据飞轮为可选计划，Task 0–5（fixture、迁移、标准化/查
 | [ch06-security-changes.md](./ch06-security-changes.md) | 安全：越权、404、Prompt 四区、输出检查、日志 | ✅ |
 | [ch07-eval-changes.md](./ch07-eval-changes.md) | 评测：44 条评测集、评测门面、EvalFlow、阈值与传导 | ✅ |
 | [ch08-frontend-changes.md](./ch08-frontend-changes.md) | 前端：SSE、进度、动作、历史、断流、验收 | ✅ |
-| [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 数据飞轮（离线模拟）：落池、标准化、审核、写回、评测 | 🚧 Task 5 |
+| [ch09-flywheel-changes.md](./ch09-flywheel-changes.md) | 数据飞轮（离线模拟）：落池、标准化、审核、写回、评测 | ✅ 闭环 |
 
 ### 3.2 验收报告（一章做完时写）
 
@@ -81,6 +82,7 @@ Ch09 数据飞轮为可选计划，Task 0–5（fixture、迁移、标准化/查
 | [ch06-acceptance.md](./ch06-acceptance.md) | 安全：越权、404、注入、输出检查、日志脱敏 | ✅ |
 | [ch07-acceptance.md](./ch07-acceptance.md) | 评测验收：清单、指标、边界、复现命令 | ✅ |
 | [ch08-acceptance.md](./ch08-acceptance.md) | 前端验收：四场景、断流、历史、回归、截图、边界 | ✅（三张截图已补；录屏待补） |
+| [ch09-flywheel-acceptance.md](./ch09-flywheel-acceptance.md) | 离线飞轮：补库前后 hit@3/citation/拒答率、44 条回归、边界 | ✅ |
 
 ### 3.3 端到端评测
 
