@@ -1,0 +1,24 @@
+# 后端构建上下文（仓库根）排除项
+.git
+.gitignore
+.venv
+venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+
+# 运行期数据/产物
+data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# 前端、文档、测试不参与后端镜像
+client
+docs
+tests
+
+# 配置与密钥
+.env
+.env.*
