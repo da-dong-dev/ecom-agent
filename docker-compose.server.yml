@@ -19,7 +19,8 @@ services:
       context: ./client
       dockerfile: Dockerfile
     ports:
-      - "8082:80"
+      # 只绑本机:公网统一走 Caddy(443),避免绕过 /api/eval/* 的 403 规则
+      - "127.0.0.1:8082:80"
     depends_on:
       backend:
         condition: service_healthy
