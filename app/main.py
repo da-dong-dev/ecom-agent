@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from openai import APITimeoutError
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,7 @@ from app.api.eval import router as eval_router
 from app.api.feedback import router as feedback_router
 from app.api.review import router as review_router
 from app.config import get_settings, validate_or_die
+from app.core import limits as limit_guard
 from app.core.kb_version import current_kb_version
 from app.core.logging import new_trace_id, setup_logging, trace_id_var
 
@@ -39,6 +40,55 @@ app.include_router(eval_router)
 app.include_router(conversations_router)
 app.include_router(feedback_router)
 app.include_router(review_router)
+
+
+# 会消耗 LLM 额度的入口；限流和预算只保护这些路径，
+# 健康检查 / meta 不消耗模型，保持可用。
+_COST_PATHS = {"/api/chat", "/api/eval/chat"}
+
+
+@app.middleware("http")
+async def cost_guard(request: Request, call_next):
+    """按真实 IP 限流 + 每日成本熔断。
+
+    顺序：先限流（便宜，直接拒），再查预算（读内存计数）。
+    两个都只作用于 POST 的聊天入口，避免影响页面和监控探测。
+    """
+    if request.method != "POST" or request.url.path not in _COST_PATHS:
+        return await call_next(request)
+
+    s = get_settings()
+    ip = limit_guard.client_ip(
+        request.headers.get("x-forwarded-for"),
+        request.client.host if request.client else None,
+    )
+
+    # getattr：测试里常用 SimpleNamespace 替换 settings，缺字段时退化为「不限制」
+    retry_after = limit_guard.rate_limited(
+        ip, getattr(s, "chat_rate_limit_per_minute", 0)
+    )
+    if retry_after is not None:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "请求过于频繁，请稍后再试。",
+                "retry_after_seconds": round(retry_after, 1),
+            },
+            headers={"Retry-After": str(int(retry_after))},
+        )
+
+    budget = getattr(s, "daily_cost_limit_yuan", 0)
+    if limit_guard.over_budget(budget):
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "今日演示额度已用完，请明天再试。",
+                "cost_yuan": limit_guard.daily_cost_yuan(),
+                "limit_yuan": budget,
+            },
+        )
+
+    return await call_next(request)
 
 
 @app.middleware("http")

@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     # Ch09：人工审核 API。会写 FAQ，默认关闭；本地演示/审核时再打开。
     enable_review_api: bool = False
 
+    # —— 公开演示的成本保护 ——
+    # 按真实 IP 的滑动窗口限流（次/分钟）；0 = 关闭
+    chat_rate_limit_per_minute: int = 20
+    # 当日累计 LLM 费用上限（元）；达到后业务接口返回 429。0 = 关闭
+    daily_cost_limit_yuan: float = 5.0
+    # 成本估算单价（元 / 百万 token），按 DeepSeek 实际价格调整
+    chat_price_input_per_1m: float = 2.0
+    chat_price_output_per_1m: float = 8.0
+
     # 观测（可选）
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -78,6 +87,8 @@ class Settings(BaseSettings):
             "prompt_version": self.prompt_version,
             "retrieval_strategy": self.retrieval_strategy,
             "kb_version": self.kb_version,
+            "rate_limit_per_minute": self.chat_rate_limit_per_minute,
+            "daily_cost_limit_yuan": self.daily_cost_limit_yuan,
             "chat_api_key": "<set>" if self.chat_api_key else "<unset>",
             "langfuse": "on" if all(
                 (self.langfuse_public_key, self.langfuse_secret_key, self.langfuse_base_url)

@@ -39,6 +39,28 @@ class LLMFormatError(Exception):
     """模型返回了，但不符合约定格式：没有 tool_calls、JSON 解析失败、缺必填字段。"""
 
 
+def _record_usage(response: Any) -> None:
+    """把本次调用的 token 用量记进每日成本（app/core/limits.py）。
+
+    统计失败绝不能影响正常业务——它只是成本保护，不是调用链路的一部分。
+    """
+    try:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        from app.core import limits
+
+        s = get_settings()
+        limits.record_usage(
+            getattr(usage, "prompt_tokens", 0) or 0,
+            getattr(usage, "completion_tokens", 0) or 0,
+            price_input_per_1m=s.chat_price_input_per_1m,
+            price_output_per_1m=s.chat_price_output_per_1m,
+        )
+    except Exception:  # noqa: BLE001 - 成本统计失败不影响业务
+        logger.debug("记录 LLM 用量失败", exc_info=True)
+
+
 @lru_cache
 def get_client() -> AsyncOpenAI:
     settings = get_settings()
@@ -89,6 +111,7 @@ async def structured_call(
             if timeout is not None
             else await request
         )
+        _record_usage(response)
         message = response.choices[0].message
         if not message.tool_calls:
             last_error = LLMFormatError("模型未返回 tool_calls")
@@ -119,6 +142,7 @@ async def chat(
         messages=messages,
         temperature=temperature,
     )
+    _record_usage(response)
     return response.choices[0].message.content or ""
 
 
@@ -173,6 +197,7 @@ async def tool_chat(
         kwargs["tool_choice"] = "auto"
 
     response = await client.chat.completions.create(**kwargs)
+    _record_usage(response)
     message = response.choices[0].message
     calls = [
         ToolCall(

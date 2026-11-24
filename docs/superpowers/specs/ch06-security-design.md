@@ -415,3 +415,31 @@ class GuardResult:
 | 金额正则漏识别（如「一千二百元」） | 先覆盖阿拉伯数字；中文数字进后续 |
 | `demo_user_id` 不是真实鉴权 | 归属逻辑已按用户实现，接鉴权只换来源 |
 | 工具结果包裹增加 prompt 长度 | 只包一层标签，长度可忽略 |
+
+---
+
+## 补充设计：限流与每日成本熔断（2026-11-25）
+
+**背景**：公网演示没有登录体系，`/api/chat` 每次调用都会消耗 DeepSeek 额度。
+没有限流时，一个脚本就能把账单刷爆；ecom 也不像 baby-ai 有 slowapi。
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 限流实现 | 进程内滑动窗口 | 单进程部署；不引入 slowapi，避免改 uv.lock |
+| 限流键 | `X-Forwarded-For` 第一个地址，回退 TCP 对端 | Caddy 用 `{remote_host}` 覆盖，可信 |
+| 保护范围 | 只拦 `POST /api/chat` 和 `/api/eval/chat` | 健康检查/meta/页面不消耗模型，保持可用 |
+| 预算口径 | LLM `usage` × 单价累加，按自然日重置 | 与 DeepSeek 计费口径一致，便于对照 |
+| 超限响应 | 429 + `Retry-After` | 客户端可退避；与限流语义一致 |
+| 计数存储 | 进程内存 | 当前单实例足够；多实例必须换 Redis |
+
+配置项：
+
+```ini
+CHAT_RATE_LIMIT_PER_MINUTE=20   # 0 = 关闭
+DAILY_COST_LIMIT_YUAN=5         # 0 = 关闭
+CHAT_PRICE_INPUT_PER_1M=2
+CHAT_PRICE_OUTPUT_PER_1M=8
+```
+
+**已知限制**：`uvicorn --workers > 1` 或水平扩容后，各进程独立计数，
+实际放行量会变成 N 倍；届时必须迁移到 Redis 共享计数。

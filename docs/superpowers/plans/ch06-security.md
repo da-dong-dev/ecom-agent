@@ -387,3 +387,20 @@ def redact(text: str) -> str:
 | Prompt 泄露标记会漏 | 最小权限优先；标记只是兜底 |
 | `demo_user_id` 不是真实鉴权 | 归属逻辑按用户实现，接鉴权只换来源 |
 | 工具结果包裹增加长度 | 只多一层标签 |
+
+---
+
+## 补充：公开演示的限流与成本熔断（2026-11-25）
+
+部署到公网后发现 ecom 没有任何频率限制和预算保护，任何人可脚本调用
+`/api/chat` 无限消耗 DeepSeek 额度。补充两层进程内保护：
+
+- [x] `app/core/limits.py`：按真实 IP 的滑动窗口限流 + 每日成本累计；
+- [x] `app/main.py`：`cost_guard` 中间件只拦截 `POST /api/chat` 与 `/api/eval/chat`；
+- [x] `app/core/llm.py`：三处 LLM 调用后把 `usage` 记入每日成本；
+- [x] 配置：`CHAT_RATE_LIMIT_PER_MINUTE=20`、`DAILY_COST_LIMIT_YUAN=5`，
+      单价 `CHAT_PRICE_INPUT_PER_1M=2` / `CHAT_PRICE_OUTPUT_PER_1M=8`；
+- [x] 测试：`tests/test_limits.py` 覆盖窗口滑动、关闭开关、成本累计与熔断。
+
+已知限制：计数在进程内存里，**只适用于单进程 uvicorn**；扩到多 worker 或
+多实例时必须换成 Redis 共享计数，否则每个进程各算各的，限流会失效。
