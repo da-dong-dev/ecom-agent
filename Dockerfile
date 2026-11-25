@@ -20,6 +20,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 # uv：按 lock 文件安装，快且可复现
 RUN pip install --no-cache-dir uv
 
+# 让容器内所有 `uv run` / `uv sync` 默认跳过 dev 依赖（ruff、pytest 等），
+# 避免执行 `uv run python scripts/xxx.py` 时联网下载几十 MB。
+ENV UV_NO_DEV=1
+
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
@@ -38,4 +42,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://127.0.0.1:8091/api/health || exit 1
 
 EXPOSE 8091
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8091"]
+# 直接用 venv 里的 uvicorn，不要用 `uv run`：
+#   `uv run` 每次启动都会同步环境，默认还包含 dev 依赖（ruff/pytest），
+#   网络慢时会下载几十 MB，超过 60s 健康检查窗口，容器被判 unhealthy。
+#   构建阶段已经 `uv sync --frozen --no-dev`，运行时直接执行即可。
+CMD [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8091"]
