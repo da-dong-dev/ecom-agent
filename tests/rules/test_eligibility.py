@@ -136,6 +136,16 @@ def test_unknown_condition_returns_none():
     assert verdict(condition_ok=None) is None
 
 
+def test_out_of_window_is_decided_even_when_condition_unknown():
+    """超期是硬性规则，不依赖「商品是否完好」；否则模型误判时代码无法否决。"""
+    result = judge_eligibility(
+        order(signed_at=NOW - timedelta(days=8)),
+        request(condition_ok=None),
+        now=NOW,
+    )
+    assert result == EligibilityVerdict(False, "out_of_window")
+
+
 def test_quality_issue_with_use_trace_is_undecidable():
     """质量问题 + 用过：代码分不清痕迹是缺陷造成的还是用户造成的，不否决。
 

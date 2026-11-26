@@ -240,7 +240,7 @@ def _iso(value: Any) -> str | None:
     return value.isoformat() if value else None
 
 
-def order_snapshot(order: Order) -> dict:
+def order_snapshot(order: Order, now: datetime | None = None) -> dict:
     """把 ORM 订单转成快照 dict。
 
     **不直接把 ORM 对象塞进 state**：state 会被序列化、会进 trace、
@@ -249,6 +249,12 @@ def order_snapshot(order: Order) -> dict:
 
     时间统一用 ISO 字符串：模型读得懂，日志里也不会有 `<object at 0x...>`。
     """
+    # 由服务端算好「签收距今天数」，不让模型自己做日期减法：
+    # 实测模型会把「签收 6 天」算成「超过 7 天」，进而误判超期。
+    days_since_signed = None
+    if order.signed_at is not None:
+        days_since_signed = ((now or utcnow()).date() - order.signed_at.date()).days
+
     return {
         "order_id": order.id,
         "status": order.status,
@@ -261,6 +267,7 @@ def order_snapshot(order: Order) -> dict:
         "paid_at": _iso(order.paid_at),
         "shipped_at": _iso(order.shipped_at),
         "signed_at": _iso(order.signed_at),
+        "days_since_signed": days_since_signed,
     }
 
 
@@ -528,6 +535,23 @@ def _red_line(
     return None
 
 
+def _window_contradiction(
+    judgement: dict, order: OrderSnapshot, now: datetime
+) -> str | None:
+    """模型说超期，但服务端算出的天数仍在窗口内 → 直接转人工。
+
+    独立于 condition_ok：即使商品是否完好未知，日期这条硬规则也能核实。
+    实测模型会把「签收 6 天」算成「超过 7 天」，且 confidence 0.9。
+    """
+    if str(judgement.get("reason_code") or "") != "out_of_window":
+        return None
+    if order.signed_at is None:
+        return None
+    if (now.date() - order.signed_at.date()).days <= WINDOW_DAYS:
+        return "window_contradiction"
+    return None
+
+
 def _divergence(
     judgement: dict, order: OrderSnapshot, request: RefundRequest, now: datetime
 ) -> str | None:
@@ -602,6 +626,8 @@ async def compliance(state: ConversationState) -> dict:
     request = _to_request(draft, order.quantity)
 
     violation = _red_line(order, request, judgement, amount, now)
+    if violation is None:
+        violation = _window_contradiction(judgement, order, now)
     if violation is None:
         violation = _divergence(judgement, order, request, now)
 

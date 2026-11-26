@@ -340,8 +340,15 @@ def judge_messages(
     只能靠训练时间猜——实测把「签收 1 天」判成了 `out_of_window`。
     """
     now = now or datetime.now(UTC).replace(tzinfo=None)
+    days = order.get("days_since_signed")
+    window_line = (
+        f"<window>签收距今 {days} 天；七日无理由窗口为 7 天（自签收次日起算）。</window>\n"
+        if days is not None
+        else ""
+    )
     user = (
         f"<now>{now.isoformat(timespec='seconds')}</now>\n"
+        f"{window_line}"
         f"<order>{json.dumps(order, ensure_ascii=False)}</order>\n"
         f"<request>{json.dumps(request, ensure_ascii=False)}</request>\n"
         f"<policy>\n{_policy_block(evidence)}\n</policy>\n"

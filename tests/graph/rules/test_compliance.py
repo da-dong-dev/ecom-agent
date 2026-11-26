@@ -117,6 +117,17 @@ async def test_red_line_amount_exceeds_paid():
     assert result["compliance_violation"] == "amount_exceeds_paid"
 
 
+async def test_model_out_of_window_but_code_says_within():
+    """模型把 3 天算成超期时，合规层必须拦住并转人工。"""
+    result = await compliance(
+        state(
+            refund_judgement=judgement(eligible=False, reason_code="out_of_window"),
+            refund_amount=0,
+        )
+    )
+    assert result["compliance_violation"] == "window_contradiction"
+
+
 async def test_red_line_zero_amount_but_eligible():
     result = await compliance(state(refund_amount=0))
     assert result["compliance_violation"] == "amount_not_positive"

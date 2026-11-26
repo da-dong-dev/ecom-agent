@@ -103,6 +103,15 @@ def judge_eligibility(
     if _matches(order.category, SEVENTH_ARTICLE_KEYWORDS) and order.packaging_opened:
         return EligibilityVerdict(False, "not_applicable")
 
+    # ── 规则 9（提前）：超过 7 天（质量问题不受限）──────────
+    # 必须在「商品是否完好」之前判：超期是硬性不适用，不依赖用户有没有说完好。
+    # 以前放在后面，model 判 out_of_window 而用户没说完好时，代码返回 None，
+    # 合规层无法否决模型——实测把「签收 6 天」误判成超期就漏过去了。
+    if order.signed_at is None:
+        return None                       # 已签收却没有签收时间 → 数据不一致
+    if request.reason_code != "quality" and not _within_window(order.signed_at, now):
+        return EligibilityVerdict(False, "out_of_window")
+
     # ── 规则 8：商品不完好 ────────────────────────────────
     if request.condition_ok is None:
         return None                       # 代码判不了，交给模型 + 低置信转人工
@@ -113,12 +122,6 @@ def judge_eligibility(
             # 交由模型结合政策判断。详见 H04 的标注结论。
             return None
         return EligibilityVerdict(False, "not_intact")
-
-    # ── 规则 9：超过 7 天（质量问题不受限）──────────────────
-    if order.signed_at is None:
-        return None                       # 已签收却没有签收时间 → 数据不一致
-    if request.reason_code != "quality" and not _within_window(order.signed_at, now):
-        return EligibilityVerdict(False, "out_of_window")
 
     # ── 规则 10：可退 ────────────────────────────────────
     return EligibilityVerdict(True, "ok")

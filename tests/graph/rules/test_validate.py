@@ -165,6 +165,13 @@ def test_snapshot_is_plain_dict_with_iso_times():
     assert order_snapshot(make_order(signed_at=None))["signed_at"] is None
 
 
+def test_snapshot_includes_days_since_signed():
+    """服务端先算好天数，避免模型自己做日期减法算错窗口。"""
+    snap = order_snapshot(make_order(), now=datetime(2026, 11, 5, 10, 0))
+    assert snap["days_since_signed"] == 4
+    assert order_snapshot(make_order(signed_at=None))["days_since_signed"] is None
+
+
 # ── need_info 按错误码追问 ─────────────────────────────────
 
 
