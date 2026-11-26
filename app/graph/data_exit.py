@@ -186,6 +186,17 @@ async def query(state: ConversationState) -> dict:
 # ── format · 组装回答 ──────────────────────────────────────
 
 
+def _date_inverted(data: dict) -> bool:
+    """签收早于发货 = 数据矛盾；查询路径也要拦住，不能只回快照。"""
+    shipped, signed = data.get("shipped_at"), data.get("signed_at")
+    if not shipped or not signed:
+        return False
+    try:
+        return datetime.fromisoformat(signed) < datetime.fromisoformat(shipped)
+    except ValueError:
+        return False
+
+
 def _time_text(value: str | None) -> str:
     """ISO 时间 → 「2026-10-29 10:00」；解析失败原样返回。"""
     if not value:
@@ -225,6 +236,8 @@ async def format(state: ConversationState) -> dict:
     data = state.get("data_result") or {}
 
     if intent == "订单查询":
+        if _date_inverted(data):
+            return transfer("date_anomaly")
         text = (
             f"订单 {data['order_id']}：状态 {data['status']}；"
             f"实付 {yuan_text(data['amount'])}；"

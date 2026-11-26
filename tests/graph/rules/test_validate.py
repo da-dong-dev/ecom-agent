@@ -92,6 +92,28 @@ async def test_both_missing(monkeypatch):
     assert set(result["validate_errors"]) == {"missing_order_id", "missing_reason_code"}
 
 
+async def test_closed_order_does_not_ask_reason(monkeypatch):
+    """状态已能定论时，不该先追问原因。"""
+    mock_order(monkeypatch, make_order(status="已关闭"))
+    result = await validate(valid_state(refund_draft={}))
+    assert result["validate_errors"] == []
+    assert result["order_snapshot"]["status"] == "已关闭"
+
+
+async def test_pending_shipment_does_not_ask_reason(monkeypatch):
+    mock_order(monkeypatch, make_order(status="待发货"))
+    result = await validate(valid_state(refund_draft={}))
+    assert result["validate_errors"] == []
+
+
+async def test_opened_bottle_does_not_ask_reason(monkeypatch):
+    mock_order(monkeypatch, make_order(category="奶瓶"))
+    result = await validate(
+        valid_state(refund_draft={"packaging_opened": True})
+    )
+    assert result["validate_errors"] == []
+
+
 # ── 守卫 2：订单属于本人 ────────────────────────────────────
 
 

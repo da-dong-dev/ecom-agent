@@ -46,6 +46,8 @@ def _order_data(order: Order) -> dict:
         "amount": order.amount,
         "quantity": order.quantity,
         "created_at": order.created_at.isoformat(),
+        "shipped_at": order.shipped_at.isoformat() if order.shipped_at else None,
+        "signed_at": order.signed_at.isoformat() if order.signed_at else None,
         "tracking_no": order.tracking_no,
     }
 

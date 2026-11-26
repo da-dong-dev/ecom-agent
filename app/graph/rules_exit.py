@@ -285,6 +285,26 @@ def _date_anomaly(order: Order) -> bool:
     return order.signed_at < order.shipped_at
 
 
+def _reason_needed(snapshot: dict, draft: dict) -> bool:
+    """退款原因是否真的会影响结论。
+
+    状态 / 类别 / 拆封 / 拒收这些规则已经能定论时，不该先追问原因——
+    实测「已关闭还能退吗」「奶瓶拆封能退吗」都被无意义地反问了。
+    只有「已签收、可能需要区分质量 vs 无理由」时才必须问。
+    """
+    status = str(snapshot.get("status") or "")
+    if status in ("待付款", "退款中", "已关闭", "待发货"):
+        return False
+    if status == "已发货" and not snapshot.get("signed_at"):
+        return False
+    category = str(snapshot.get("category") or "")
+    if _category_matches(category, NOT_APPLICABLE_KEYWORDS):
+        return False
+    if _category_matches(category, SEVENTH_ARTICLE_KEYWORDS) and draft.get("packaging_opened"):
+        return False
+    return True
+
+
 async def validate(state: ConversationState) -> dict:
     """校验要素：齐不齐、是不是本人的单、日期是否矛盾。
 
@@ -303,19 +323,24 @@ async def validate(state: ConversationState) -> dict:
 
     if not order_id:
         errors.append("missing_order_id")
-    if not draft.get("reason_code"):
-        errors.append("missing_reason_code")
 
-    if order_id and not errors:
+    snapshot: dict | None = None
+    if order_id:
         try:
             order = await get_order(order_id, user_id=user_id)
         except NotFound:
             # 不存在与越权共用 NotFound（S1）：不能泄露"这单确实存在"
             errors.append("order_not_found")
         else:
-            updates["order_snapshot"] = order_snapshot(order)
+            snapshot = order_snapshot(order)
+            updates["order_snapshot"] = snapshot
             if _date_anomaly(order):
                 errors.append("date_anomaly")
+
+    # 先看订单，再决定要不要问原因：状态/类别已能定论时不追问。
+    reason_needed = True if snapshot is None else _reason_needed(snapshot, draft)
+    if not draft.get("reason_code") and reason_needed:
+        errors.append("missing_reason_code")
 
     updates["validate_errors"] = errors
 

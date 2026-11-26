@@ -55,6 +55,18 @@ async def test_order_with_tracking_appends_number():
     assert result["answer"].endswith("物流单号 SF1001。")
 
 
+async def test_order_date_inverted_transfers():
+    """签收早于发货是数据矛盾；查询路径也要转人工，不能只回快照。"""
+    data = {
+        **ORDER,
+        "shipped_at": "2026-11-20T10:00:00",
+        "signed_at": "2026-11-18T10:00:00",
+    }
+    result = await format_answer(state("订单查询", **data))
+    assert result["transfer_reason"] == "date_anomaly"
+    assert result["actions"]
+
+
 # ── 物流 ───────────────────────────────────────────────────
 
 
