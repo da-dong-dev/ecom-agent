@@ -91,7 +91,16 @@ async def test_logistics_without_tracking():
         )
     )
 
-    assert result["answer"] == "订单 1002 当前状态：待发货，暂无物流信息。"
+    assert result["answer"] == (
+        "订单 1002 当前状态：待发货，预计付款后 48 小时内发出，暂无物流信息。"
+    )
+
+
+async def test_pending_shipment_order_includes_eta():
+    result = await format_answer(
+        state("订单查询", **{**ORDER, "status": "待发货", "tracking_no": None})
+    )
+    assert "预计付款后 48 小时内发出" in result["answer"]
 
 
 async def test_logistics_without_nodes_skips_trajectory():

@@ -243,6 +243,8 @@ async def format(state: ConversationState) -> dict:
             f"实付 {yuan_text(data['amount'])}；"
             f"下单时间 {_time_text(data['created_at'])}。"
         )
+        if data["status"] == "待发货":
+            text += "预计付款后 48 小时内发出。"
         if data.get("tracking_no"):
             text += f"物流单号 {data['tracking_no']}。"
         return {"answer": text, "is_placeholder": False}
@@ -251,9 +253,11 @@ async def format(state: ConversationState) -> dict:
         tracking = data.get("tracking")
         if tracking is None:
             order = data.get("order") or {}
+            status = order.get("status")
+            extra = "，预计付款后 48 小时内发出" if status == "待发货" else ""
             return {
                 "answer": (
-                    f"订单 {order.get('order_id')} 当前状态：{order.get('status')}，"
+                    f"订单 {order.get('order_id')} 当前状态：{status}{extra}，"
                     "暂无物流信息。"
                 ),
                 "is_placeholder": False,
