@@ -252,8 +252,10 @@ def order_snapshot(order: Order, now: datetime | None = None) -> dict:
     # 由服务端算好「签收距今天数」，不让模型自己做日期减法：
     # 实测模型会把「签收 6 天」算成「超过 7 天」，进而误判超期。
     days_since_signed = None
+    within_window = None
     if order.signed_at is not None:
         days_since_signed = ((now or utcnow()).date() - order.signed_at.date()).days
+        within_window = days_since_signed <= WINDOW_DAYS
 
     return {
         "order_id": order.id,
@@ -268,6 +270,7 @@ def order_snapshot(order: Order, now: datetime | None = None) -> dict:
         "shipped_at": _iso(order.shipped_at),
         "signed_at": _iso(order.signed_at),
         "days_since_signed": days_since_signed,
+        "within_window": within_window,
     }
 
 

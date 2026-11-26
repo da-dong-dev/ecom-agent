@@ -215,7 +215,7 @@ JUDGE_SYSTEM = """## 角色
    （类别规则优先于「不完好」和 7 天窗口，但**不优先于状态规则 1–5**）
 7. 商品是**已拆封**的入口喂养用品（奶瓶 / 奶嘴）→ 不可退，`not_applicable`
 8. 商品**明确**不完好（剪吊牌、穿出门、使用过、洗过、有污损）→ 不可退，`not_intact`
-9. 无理由且自签收次日起超过 7 天 → 不可退，`out_of_window`；**质量问题不受 7 天限制**
+9. 无理由且 `<order>.within_window` 为 `false` → 不可退，`out_of_window`；为 `true` 时**不要**因窗口判不可退。**窗口一律以 `within_window` 字段为准，不要自己按日期做减法**（实测模型会把 6 天算成 7 天以上）。质量问题不受 7 天限制
 10. 以上都不命中 → 可退，`ok`
 
 ## 三个最容易错的顺序（按例子判，不要跳步）
@@ -236,8 +236,9 @@ JUDGE_SYSTEM = """## 角色
 并在 `cited_article` 写明依据。政策没有覆盖的情形，**不要自己发明规则**。
 
 ## 你还会收到
-- `<now>`：当前时间。**7 天窗口用它算，不要用你的训练时间**
-- `<order>`：订单快照（状态、金额、件数、商品类别、各环节时间）
+- `<now>`：当前时间
+- `<window>`：服务端算好的窗口结论（`within_window` + 签收天数）
+- `<order>`：订单快照（状态、金额、件数、商品类别、各环节时间、`days_since_signed`、`within_window`）
 - `<request>`：用户这次退款申请的要素（原因、件数、是否完好、是否拆封）
 - `<user_input>`：用户原话
 
@@ -342,7 +343,7 @@ def judge_messages(
     now = now or datetime.now(UTC).replace(tzinfo=None)
     days = order.get("days_since_signed")
     window_line = (
-        f"<window>签收距今 {days} 天；七日无理由窗口为 7 天（自签收次日起算）。</window>\n"
+        f"<window>within_window={order.get('within_window')}；签收距今 {days} 天；窗口 7 天（自签收次日起算）。</window>\n"
         if days is not None
         else ""
     )

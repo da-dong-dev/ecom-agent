@@ -169,7 +169,13 @@ def test_snapshot_includes_days_since_signed():
     """服务端先算好天数，避免模型自己做日期减法算错窗口。"""
     snap = order_snapshot(make_order(), now=datetime(2026, 11, 5, 10, 0))
     assert snap["days_since_signed"] == 4
+    assert snap["within_window"] is True
     assert order_snapshot(make_order(signed_at=None))["days_since_signed"] is None
+    assert order_snapshot(make_order(signed_at=None))["within_window"] is None
+
+    late = order_snapshot(make_order(), now=datetime(2026, 11, 10, 10, 0))
+    assert late["days_since_signed"] == 9
+    assert late["within_window"] is False
 
 
 # ── need_info 按错误码追问 ─────────────────────────────────
