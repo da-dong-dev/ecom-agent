@@ -2,6 +2,12 @@
 
 面向消费者的售后客服（C 端），核心是把退费核算从人工翻合同变成可核对、可追溯的自动计算。
 
+> **在线体验**：<https://ecom.da-dong.com>
+>
+> **评测结果**：30 条盲测 correctness 0.783，修复退款窗口与流程问题后同批回归 0.987；
+> 44 条端到端评测 correctness 0.998（本地脚本）/ 1.0（EvalFlow 平台全量 Judge）。
+> 线上保护：20 次/分限流 + 每日 5 元预算；3 并发完整响应 P95 1.58s。
+
 > Ch01–Ch08 已在本地跑通；Ch09 离线数据飞轮已完成闭环，
 > 见 [ch09-flywheel-acceptance.md](docs/reports/ch09-flywheel-acceptance.md)。
 > 设计文档见 [docs/design/](docs/design/)。
