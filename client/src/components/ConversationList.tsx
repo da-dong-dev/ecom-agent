@@ -4,6 +4,7 @@ import {
   PlusOutlined,
 } from "@ant-design/icons";
 import { Button, Card, List, Popconfirm, Space, Tag, Typography } from "antd";
+import { useEffect, useRef } from "react";
 
 import { formatConversationTime } from "../lib/time";
 
@@ -42,6 +43,19 @@ export function ConversationList({
   onDelete,
   disabled = false,
 }: Props) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (activeId === null) {
+      return;
+    }
+    const item = listRef.current?.querySelector(
+      `[data-conversation-id="${activeId}"]`,
+    );
+    // jsdom 没有 scrollIntoView；生产浏览器里只滚到可见区域，不跳顶。
+    item?.scrollIntoView?.({ block: "nearest" });
+  }, [activeId, items]);
+
   return (
     <Card
       size="small"
@@ -67,65 +81,75 @@ export function ConversationList({
         </Button>
       }
     >
-      <List
-        size="small"
-        loading={loading}
-        dataSource={items}
-        locale={{ emptyText: "暂无历史会话" }}
-        renderItem={(item) => (
-          <List.Item
-            className={`conversation-item ${
-              item.id === activeId ? "active" : ""
-            } ${disabled ? "disabled" : ""}`}
-            aria-disabled={disabled}
-            title={disabled ? "正在回复中，请稍候" : undefined}
-            onClick={() => {
-              if (!disabled) {
-                onSelect(item.id);
-              }
-            }}
-          >
-            <div className="conversation-body">
-              <span className="conversation-title" data-testid="conversation-title">
-                {item.title}
-              </span>
-              <div className="conversation-meta">
-                <Typography.Text type="secondary" className="conversation-time">
-                  {formatConversationTime(item.updated_at)}
-                </Typography.Text>
-                {flowLabel(item) ? (
-                  <Tag color="orange">{flowLabel(item)}</Tag>
-                ) : null}
-              </div>
-            </div>
-
-            {onDelete ? (
-              <span
-                className="conversation-actions"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <Popconfirm
-                  title="删除这个会话？"
-                  description="删除后不会出现在历史列表。"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => onDelete(item.id)}
+      <div ref={listRef}>
+        <List
+          size="small"
+          loading={loading}
+          dataSource={items}
+          locale={{ emptyText: "暂无历史会话" }}
+          renderItem={(item) => (
+            <List.Item
+              data-conversation-id={item.id}
+              aria-current={item.id === activeId ? "true" : undefined}
+              className={`conversation-item ${
+                item.id === activeId ? "active" : ""
+              } ${disabled ? "disabled" : ""}`}
+              aria-disabled={disabled}
+              title={disabled ? "正在回复中，请稍候" : undefined}
+              onClick={() => {
+                if (!disabled) {
+                  onSelect(item.id);
+                }
+              }}
+            >
+              <div className="conversation-body">
+                <span
+                  className="conversation-title"
+                  data-testid="conversation-title"
                 >
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    disabled={disabled}
-                    aria-label="删除会话"
-                    icon={<DeleteOutlined aria-hidden />}
-                  />
-                </Popconfirm>
-              </span>
-            ) : null}
-          </List.Item>
-        )}
-      />
+                  {item.title}
+                </span>
+                <div className="conversation-meta">
+                  <Typography.Text
+                    type="secondary"
+                    className="conversation-time"
+                  >
+                    {formatConversationTime(item.updated_at)}
+                  </Typography.Text>
+                  {flowLabel(item) ? (
+                    <Tag color="orange">{flowLabel(item)}</Tag>
+                  ) : null}
+                </div>
+              </div>
+
+              {onDelete ? (
+                <span
+                  className="conversation-actions"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Popconfirm
+                    title="删除这个会话？"
+                    description="删除后不会出现在历史列表。"
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => onDelete(item.id)}
+                  >
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      disabled={disabled}
+                      aria-label="删除会话"
+                      icon={<DeleteOutlined aria-hidden />}
+                    />
+                  </Popconfirm>
+                </span>
+              ) : null}
+            </List.Item>
+          )}
+        />
+      </div>
     </Card>
   );
 }

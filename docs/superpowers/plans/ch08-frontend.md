@@ -1019,3 +1019,14 @@ Task 0（spike）
 - [ ] `README.md` 有前后端启动与迁移命令。
 - [ ] `todo.md` 关闭 P0 / P3 迁移与 `diff` 修正；保留 P3 #8 边界与触发型 P4。
 - [ ] 没有自动 commit / push；提交由用户明确指示。
+
+---
+
+## 后续修复（2026-11-28）
+
+会话列表选中态：
+
+- `append_message` touch `conversations.updated_at`，保证最近活动排序正确；
+- 旧会话从 URL/localStorage 指向、但不在最近 20 条时，不加载旧会话；选中最近一条，列表为空才回到新会话；
+- `ConversationList` 对 active 项 `scrollIntoView({ block: "nearest" })`；
+- 详见 [ch08-frontend-changes.md](../../reports/ch08-frontend-changes.md) §12.37。

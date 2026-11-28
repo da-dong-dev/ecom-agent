@@ -2193,3 +2193,129 @@ ls -lh docs/assets/ch08/
 
 索引同步：`docs/interview/README.md`、`docs/reports/README.md`、
 `docs/reports/resume-positioning.md`、`docs/interview/self-test.md`。
+
+---
+
+## 12.37 · 会话列表选中态与排序（2026-11-28）
+
+### 问题
+
+右侧已经打开一个会话，左侧列表没有选中态。
+
+根因有两层：
+
+1. **列表只取最近 20 条**：从 URL / localStorage 打开旧会话时，它可能不在列表里，
+   左侧没有对应条目可高亮；
+2. **`conversations.updated_at` 不会随消息更新**：之前只有 `set_flow` / `clear_flow`
+   和软删会改更新时间。纯聊天会话一直停在创建时间，容易掉出最近 20 条；
+3. 即使 active 在列表里，列表也不会把它滚进可视区域。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `app/db/repo_message.py` | `append_message` 成功插入后 touch `conversations.updated_at` |
+| `client/src/state/conversationSummary.ts` | 历史 → 摘要；`mergeActiveSummary` 保证 active 一定在列表 |
+| `client/src/hooks/useConversations.ts` | bootstrap / loadConversation 后把 active 摘要并入列表 |
+| `client/src/hooks/useChatSession.ts` | 切换会话时不再并发刷新列表，避免把 active 冲掉 |
+| `client/src/components/ConversationList.tsx` | active 项加 `data-conversation-id` / `aria-current`，变化时 `scrollIntoView({block:"nearest"})` |
+| `tests/db/test_repo_message.py` | 新增 updated_at touch 测试 |
+| `client/src/state/conversationSummary.test.ts` | 新增摘要/合并测试 |
+| `client/src/components/conversations.test.tsx` | 新增 active class / aria-current 断言 |
+
+### 行为
+
+```text
+打开旧会话（不在最近 20 条）
+  → 历史加载后生成摘要
+  → 摘要 prepend 到列表
+  → active 高亮可见
+
+发送任意新消息
+  → append_message touch conversations.updated_at
+  → 会话重新回到最近列表的合理位置
+```
+
+### 验证
+
+```bash
+uv run pytest tests/db/test_repo_message.py -q
+# 12 passed
+
+uv run pytest -q
+# 1156 passed, 9 skipped
+
+cd client
+npm run typecheck
+npm test
+# 14 files, 91 tests passed
+npm run build
+# 通过；dist JS 1122.77 kB（gzip 351.49 kB）
+```
+
+Playwright 验证：
+
+```text
+打开 /?c=27（id=27 不在最近 20 条）
+→ .conversation-item.active 数量 = 1
+→ active 文本 = 我要退款
+```
+
+---
+
+## 12.38 · 旧会话不在最近 20 条时改为回退（2026-11-28）
+
+### 问题
+
+12.37 的处理是把旧会话摘要 prepend 到列表，虽然能高亮，但交互不自然：
+
+- 最近 20 条变成 21 条；
+- 旧会话被放在最新会话上面，破坏 `updated_at` 排序；
+- 用户分不清它是“当前会话”还是“最近会话”。
+
+### 决策
+
+如果 URL / localStorage 指向的会话不在最近 20 条：
+
+```text
+→ 不加载旧会话
+→ 选中最近的一条会话
+→ URL 同步更新为最近会话 id
+→ 列表为空时才回到新会话欢迎页
+```
+
+这样保持“最近 20 条”的语义，也始终有选中态。
+
+### 修改
+
+| 文件 | 修改 |
+|---|---|
+| `client/src/hooks/useConversations.ts` | 新增 `chooseBootstrapTarget`；旧 id 不在列表时回退到 `items[0]` |
+| `client/src/hooks/useConversations.test.ts` | 4 条启动目标选择测试 |
+| `client/src/state/conversationSummary.ts` | 删除（不再 prepend 摘要） |
+| `client/src/state/conversationSummary.test.ts` | 删除 |
+
+保留：
+
+- `append_message` touch `conversations.updated_at`；
+- `ConversationList` 的 active 高亮和 `scrollIntoView`。
+
+### 验证
+
+```bash
+cd client
+npm run typecheck
+npm test
+# 14 files, 92 tests passed
+npm run build
+# 通过；dist JS 1122.27 kB（gzip 351.35 kB）
+```
+
+Playwright：
+
+```text
+打开 /?c=27（27 不在最近 20 条）
+→ URL 变为 /?c=62
+→ .conversation-item.active 数量 = 1
+→ active 文本 = 退货政策是什么
+```

@@ -1,4 +1,6 @@
 """会话/消息仓库：幂等与事务复用。"""
+from datetime import datetime
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -62,6 +64,20 @@ async def test_duplicate_client_message_id_returns_same_row(session):
         )
     ).scalar()
     assert count == 1
+
+
+async def test_new_message_touches_conversation_updated_at(session):
+    """会话列表按 updated_at 排序；消息写入必须刷新它。"""
+    cid = await create_conversation("u1", session=session)
+    conv = await get_conversation(cid, user_id="u1", session=session)
+    old = datetime(2020, 1, 1)
+    conv.updated_at = old
+    await session.commit()
+
+    await append_message(cid, "user", "你好", session=session)
+
+    await session.refresh(conv)
+    assert conv.updated_at > old
 
 
 async def test_messages_without_idempotency_key_accumulate(session):

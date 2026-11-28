@@ -16,6 +16,23 @@ import { buildHistoryState, readConversationId } from "../state/reconnect";
 import type { TurnAction } from "../state/turn";
 
 /**
+ * 选择启动时要打开的会话：
+ *
+ * - URL/localStorage 指向的会话在最近 20 条里 → 打开它；
+ * - 不在最近 20 条 → 选中最近一条；
+ * - 列表为空 → 不打开历史，回到新会话欢迎页。
+ */
+export function chooseBootstrapTarget(
+  items: ConversationSummary[],
+  preferred: number | null,
+): number | null {
+  if (preferred !== null && items.some((item) => item.id === preferred)) {
+    return preferred;
+  }
+  return items[0]?.id ?? null;
+}
+
+/**
  * 会话列表 + 历史加载：
  * 启动时恢复上次会话；切换会话时把历史灌进聊天状态。
  */
@@ -38,8 +55,11 @@ export function useConversations(dispatch: Dispatch<TurnAction>) {
           window.location.search,
           getStorage(),
         );
-        const target = preferred ?? list.items[0]?.id ?? null;
+        const target = chooseBootstrapTarget(list.items, preferred);
         if (target === null) {
+          if (preferred !== null) {
+            forgetConversationId();
+          }
           return;
         }
 

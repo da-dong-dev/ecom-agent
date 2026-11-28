@@ -7,11 +7,11 @@
 import json
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Message
+from app.db.models import Conversation, Message, utcnow
 from app.db.session import session_scope
 
 
@@ -66,6 +66,15 @@ async def append_message(
                 if existing is not None:
                     return existing
             raise
+
+        # 会话列表按 updated_at 排序；每条新消息都要 touch，
+        # 否则只聊天、不写流程状态的会话会一直停在创建时间，
+        # 很容易掉出最近 20 条，前端右侧有内容但左侧没有选中项。
+        await s.execute(
+            update(Conversation)
+            .where(Conversation.id == cid)
+            .values(updated_at=utcnow())
+        )
         return msg.id
 
 

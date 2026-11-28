@@ -44,6 +44,10 @@ describe("ConversationList", () => {
 
     fireEvent.click(screen.getByText("第二个会话"));
     expect(onSelect).toHaveBeenCalledWith(2);
+
+    const active = screen.getByText("第一个会话").closest("li");
+    expect(active?.className).toContain("active");
+    expect(active?.getAttribute("aria-current")).toBe("true");
   });
 
   it("disables switching and new conversation while replying", () => {

@@ -302,7 +302,8 @@ export function useChatSession() {
       return;
     }
     confirmStop("切换会话？", "当前回复还在生成，切换会停止本次回复。", () => {
-      void refreshConversations();
+      // 不在切换前刷新列表：旧会话可能不在最近 20 条，
+      // 刷新会把它冲掉；loadConversation 会把当前摘要补进列表。
       void loadConversation(id);
     });
   }
